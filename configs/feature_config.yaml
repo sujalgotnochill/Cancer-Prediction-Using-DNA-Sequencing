@@ -1,0 +1,15 @@
+kmers:
+  k: 6
+  stride: 1
+  to_lower: true
+  as_sentence: true
+
+vectorizer:
+  type: "count"
+  ngram_range: [4, 4]
+  max_features: 10000
+  lowercase: false
+
+label_encoder:
+  type: "label_encoder"
+

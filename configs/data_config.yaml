@@ -1,0 +1,27 @@
+dataset:
+  name: "dna_cancer_dataset"
+  raw_file: "data/raw/dna_sequences.csv"
+  interim_file: "data/interim/cleaned_sequences.csv"
+  processed_file: "data/processed/features.csv"
+  sequence_column: "sequence"
+  target_column: "cancer"
+  id_column: "id"
+  length_column: "len"
+  expected_classes:
+    - "Cervical Cancer"
+    - "Colorectal Cancer"
+    - "Endometrial Cancer"
+    - "Liver Cancer"
+  split:
+    train_size: 0.70
+    val_size: 0.15
+    test_size: 0.15
+    stratify: true
+    random_state: 42
+
+validation:
+  min_sequence_length: 20
+  max_sequence_length: 1000000
+  allowed_bases: "ACGTN"
+  allow_empty: false
+

@@ -1,0 +1,22 @@
+project:
+  name: "Cancer Prediction Using DNA Sequencing"
+  version: "0.1.0"
+  seed: 42
+  environment: "development"
+
+paths:
+  data_dir: "data"
+  raw_data_dir: "data/raw"
+  interim_data_dir: "data/interim"
+  processed_data_dir: "data/processed"
+  artifacts_dir: "artifacts"
+  models_dir: "artifacts/models"
+  vectorizers_dir: "artifacts/vectorizers"
+  encoders_dir: "artifacts/encoders"
+  evaluation_dir: "artifacts/evaluation"
+  logs_dir: "logs"
+
+logging:
+  level: "INFO"
+  format: "%(asctime)s [%(levelname)s] [%(name)s]: %(message)s"
+

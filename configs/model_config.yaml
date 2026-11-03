@@ -1,0 +1,26 @@
+model:
+  name: "dense_classifier"
+  type: "neural_network"
+  input_dim: null
+  num_classes: 4
+  architecture:
+    layers:
+      - units: 200
+        activation: "relu"
+        dropout: 0.2
+      - units: 100
+        activation: "relu"
+        dropout: 0.2
+      - units: 4
+        activation: "softmax"
+  training:
+    optimizer: "adam"
+    learning_rate: 0.001
+    loss: "sparse_categorical_crossentropy"
+    metrics: ["accuracy"]
+    batch_size: 32
+    epochs: 10
+    early_stopping:
+      patience: 3
+      monitor: "val_loss"
+
