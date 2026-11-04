@@ -4,15 +4,11 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
 try:
-    import numpy as np
-except ImportError:
-    np = None  # type: ignore
-
-try:
     import pandas as pd
 except ImportError:
     pd = None  # type: ignore
 
+from dna_cancer.data.ingestion import SimpleDataFrame
 from dna_cancer.utils.exceptions import DataValidationError
 from dna_cancer.utils.logger import get_logger
 
@@ -65,9 +61,7 @@ class DNADataset:
         return distribution
 
     def to_dataframe(self) -> Any:
-        """Export dataset as a pandas DataFrame."""
-        if pd is None:
-            raise DataValidationError("pandas is required for to_dataframe. Please install pandas.")
+        """Export dataset as a pandas DataFrame or SimpleDataFrame."""
         rows = [
             {
                 "id": s.sample_id,
@@ -77,7 +71,9 @@ class DNADataset:
             }
             for s in self.samples
         ]
-        return pd.DataFrame(rows)
+        if pd is not None:
+            return pd.DataFrame(rows)
+        return SimpleDataFrame(rows)
 
     @classmethod
     def from_dataframe(
@@ -87,7 +83,7 @@ class DNADataset:
         target_column: Optional[str] = "cancer",
         id_column: Optional[str] = "id",
     ) -> "DNADataset":
-        """Instantiate a DNADataset from a DataFrame or dict-like object."""
+        """Instantiate a DNADataset from a DataFrame or SimpleDataFrame."""
         try:
             cols = list(df.columns)
         except AttributeError:
@@ -97,15 +93,15 @@ class DNADataset:
             raise DataValidationError(f"Missing required sequence column: '{sequence_column}'")
 
         samples: List[CancerSequenceSample] = []
-        # Support iterating rows across pandas DataFrame or custom table objects
         if hasattr(df, "iterrows"):
             for idx, row in df.iterrows():
                 seq = str(row[sequence_column])
-                label = str(row[target_column]) if target_column and target_column in cols and (pd is None or pd.notna(row[target_column])) else None
-                s_id = str(row[id_column]) if id_column and id_column in cols and (pd is None or pd.notna(row[id_column])) else str(idx)
+                raw_label = row.get(target_column) if hasattr(row, "get") else (row[target_column] if target_column in cols else None)
+                label = str(raw_label) if raw_label is not None and str(raw_label) != "nan" else None
+                raw_id = row.get(id_column) if hasattr(row, "get") else (row[id_column] if id_column in cols else None)
+                s_id = str(raw_id) if raw_id is not None and str(raw_id) != "nan" else str(idx)
                 samples.append(CancerSequenceSample(sequence=seq, label=label, sample_id=s_id))
         else:
-            # Fallback for dict/list rows
             for idx, item in enumerate(df):
                 samples.append(CancerSequenceSample(
                     sequence=str(item.get(sequence_column, "")),
@@ -124,9 +120,17 @@ class DNADataset:
         random_state: int = 42,
     ) -> Tuple["DNADataset", "DNADataset", "DNADataset"]:
         """Split dataset into train, validation, and test subsets."""
+        if len(self.samples) == 0:
+            raise DataValidationError("Cannot split an empty dataset.")
+
         total = train_size + val_size + test_size
         if abs(total - 1.0) > 1e-4:
             raise DataValidationError(f"Split sizes must sum to 1.0, got {total}")
+
+        if len(self.samples) < 3:
+            raise DataValidationError(
+                f"Dataset must contain at least 3 samples to perform 3-way split, got {len(self.samples)}"
+            )
 
         try:
             from sklearn.model_selection import train_test_split

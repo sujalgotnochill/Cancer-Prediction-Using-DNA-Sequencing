@@ -1,6 +1,6 @@
 """Dataset and DNA sequence validation module."""
 
-from typing import Any, Iterable, List, Optional, Set
+from typing import Any, Dict, Iterable, List, Optional, Set
 
 from dna_cancer.utils.exceptions import DataValidationError, SequenceFormatError
 from dna_cancer.utils.logger import get_logger
@@ -160,3 +160,94 @@ def validate_dataset_schema(
 
     return True
 
+
+def validate_dataset_records(
+    df: Any,
+    sequence_column: str = "sequence",
+    target_column: Optional[str] = "cancer",
+    expected_classes: Optional[Iterable[str]] = None,
+    validator: Optional[SequenceValidator] = None,
+    allow_missing_labels: bool = False,
+    raise_exception: bool = True,
+) -> Dict[str, Any]:
+    """Validate row-level records within a dataset for missing sequences, invalid bases, and invalid labels.
+
+    Args:
+        df: DataFrame or duck-typed object supporting .columns and .iterrows().
+        sequence_column: Name of the nucleotide sequence column.
+        target_column: Optional name of target cancer classification column.
+        expected_classes: Optional iterable of allowed target class names.
+        validator: Optional SequenceValidator instance.
+        allow_missing_labels: Whether None/empty labels are permissible.
+        raise_exception: If True, raises validation errors on the first failure encountered.
+
+    Returns:
+        Dictionary with record counts and validation summary.
+
+    Raises:
+        DataValidationError: If required columns, sequences, or labels are invalid and raise_exception is True.
+        SequenceFormatError: If sequence nucleotide composition is invalid and raise_exception is True.
+    """
+    validate_dataset_schema(df, required_columns=[sequence_column], raise_exception=raise_exception)
+
+    seq_validator = validator or SequenceValidator()
+    expected_set = set(expected_classes) if expected_classes else None
+
+    total_records = len(df)
+    valid_count = 0
+    invalid_seq_indices: List[int] = []
+    invalid_label_indices: List[int] = []
+
+    # Iterate rows across pandas or SimpleDataFrame
+    iterator = df.iterrows() if hasattr(df, "iterrows") else enumerate(df)
+
+    for idx, row in iterator:
+        # 1. Validate Sequence
+        raw_seq = row.get(sequence_column) if hasattr(row, "get") else row[sequence_column]
+        if raw_seq is None or (isinstance(raw_seq, float) and str(raw_seq) == "nan"):
+            if raise_exception:
+                raise DataValidationError(f"Row {idx}: missing nucleotide sequence (value is null/NaN).")
+            invalid_seq_indices.append(idx)
+            continue
+
+        seq_str = str(raw_seq).strip()
+        if not seq_str:
+            if raise_exception:
+                raise DataValidationError(f"Row {idx}: empty nucleotide sequence.")
+            invalid_seq_indices.append(idx)
+            continue
+
+        if not seq_validator.is_valid(seq_str):
+            if raise_exception:
+                raise SequenceFormatError(f"Row {idx}: sequence failed validation (length or invalid bases).")
+            invalid_seq_indices.append(idx)
+            continue
+
+        # 2. Validate Label
+        if target_column and target_column in getattr(df, "columns", []):
+            raw_label = row.get(target_column) if hasattr(row, "get") else row[target_column]
+            if raw_label is None or (isinstance(raw_label, float) and str(raw_label) == "nan") or str(raw_label).strip() == "":
+                if not allow_missing_labels:
+                    if raise_exception:
+                        raise DataValidationError(f"Row {idx}: missing target label in column '{target_column}'.")
+                    invalid_label_indices.append(idx)
+                    continue
+            else:
+                label_str = str(raw_label).strip()
+                if expected_set and label_str not in expected_set:
+                    if raise_exception:
+                        raise DataValidationError(
+                            f"Row {idx}: invalid label '{label_str}'. Expected one of: {sorted(expected_set)}"
+                        )
+                    invalid_label_indices.append(idx)
+                    continue
+
+        valid_count += 1
+
+    summary = {
+        "total_records": total_records,
+        "valid_records": valid_count,
+        "invalid_sequences": len(invalid_seq_indices),
+        "invalid_labels": len(invalid_label_indices),
+    }
+    return summary

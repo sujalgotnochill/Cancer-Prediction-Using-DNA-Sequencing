@@ -9,11 +9,6 @@ except ImportError:
     joblib = None  # type: ignore
 
 try:
-    import numpy as np
-except ImportError:
-    np = None  # type: ignore
-
-try:
     from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
     from sklearn.preprocessing import LabelEncoder
 except ImportError:
@@ -67,14 +62,27 @@ class FeatureBuilder:
     def fit(self, sequences: List[str], labels: Optional[List[str]] = None) -> "FeatureBuilder":
         """Fit vectorizer on sequences and optionally label encoder on target classes."""
         self._ensure_vectorizer()
+        if not sequences:
+            raise FeatureExtractionError("Cannot fit FeatureBuilder on an empty list of sequences.")
+
         logger.info("Extracting k-mers for feature fitting on %d sequences...", len(sequences))
         sentences = [self.kmer_extractor.extract(s) for s in sequences]
+
+        # Ensure at least one sentence has tokens
+        if not any(bool(s) for s in sentences):
+            raise FeatureExtractionError(
+                f"All input sequences yielded empty k-mer sentences (check if all sequences are shorter than k={self.kmer_extractor.k})."
+            )
 
         self.vectorizer.fit(sentences)
 
         if labels is not None:
             if self.label_encoder is None:
                 raise FeatureExtractionError("scikit-learn is required for LabelEncoder.")
+            if len(labels) != len(sequences):
+                raise FeatureExtractionError(
+                    f"Number of labels ({len(labels)}) does not match sequences ({len(sequences)})."
+                )
             self.label_encoder.fit(labels)
 
         self.is_fitted = True
@@ -82,9 +90,12 @@ class FeatureBuilder:
 
     def transform_sequences(self, sequences: List[str]) -> Any:
         """Transform DNA sequences into vector feature matrix."""
-        self._ensure_vectorizer()
         if not self.is_fitted:
             raise FeatureExtractionError("FeatureBuilder has not been fitted yet.")
+        self._ensure_vectorizer()
+
+        if not sequences:
+            raise FeatureExtractionError("Cannot transform empty list of sequences.")
 
         sentences = [self.kmer_extractor.extract(s) for s in sequences]
         matrix = self.vectorizer.transform(sentences)

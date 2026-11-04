@@ -9,6 +9,7 @@ from dna_cancer.config.settings import (
     ProjectSettings,
     get_project_root,
     load_config,
+    resolve_path,
 )
 
 __all__ = [
@@ -19,6 +20,6 @@ __all__ = [
     "FeatureSettings",
     "ModelSettings",
     "get_project_root",
+    "resolve_path",
     "load_config",
 ]
-

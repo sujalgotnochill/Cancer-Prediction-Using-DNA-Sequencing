@@ -26,7 +26,8 @@ class DNAPredictor:
     ) -> None:
         self.model = model
         self.feature_builder = feature_builder or FeatureBuilder()
-        self.cleaner = cleaner or SequenceCleaner()
+        # Default cleaner in predictor preserves characters to ensure validation catches invalid bases
+        self.cleaner = cleaner or SequenceCleaner(to_upper=True, remove_whitespace=True, remove_non_nucleotide=False)
         self.validator = validator or SequenceValidator()
 
     @classmethod
@@ -58,12 +59,18 @@ class DNAPredictor:
         if self.model is None:
             raise PredictionError(
                 "Model has not been initialized or loaded in DNAPredictor. "
-                "Complete Phase 2 model training or load existing artifacts."
+                "Complete Phase 2/3 model training or load existing artifacts."
             )
+
+        if not isinstance(raw_sequence, str):
+            raise PredictionError(f"Expected sequence string, got {type(raw_sequence).__name__}")
+
+        if not raw_sequence.strip():
+            raise PredictionError("Input sequence cannot be empty.")
 
         cleaned = self.cleaner.clean(raw_sequence)
         if not self.validator.is_valid(cleaned):
-            raise PredictionError(f"Sequence failed validation: invalid nucleotide composition or length.")
+            raise PredictionError("Sequence failed validation: invalid nucleotide composition or length.")
 
         features = self.feature_builder.transform_sequences([cleaned])
         pred_idx = int(self.model.predict(features)[0])

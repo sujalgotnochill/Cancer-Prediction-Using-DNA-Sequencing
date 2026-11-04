@@ -7,10 +7,7 @@ from dna_cancer.config.settings import AppConfig, load_config
 from dna_cancer.data.dataset import DNADataset
 from dna_cancer.data.ingestion import load_csv
 from dna_cancer.features.feature_builder import FeatureBuilder
-from dna_cancer.models.base_model import BaseDNAClassifier
-from dna_cancer.models.model_factory import ModelFactory
 from dna_cancer.preprocessing.sequence_processor import SequenceProcessor
-from dna_cancer.training.trainer import Trainer, TrainerConfig
 from dna_cancer.utils.exceptions import TrainingError
 from dna_cancer.utils.logger import get_logger
 
@@ -43,7 +40,7 @@ class TrainingPipeline:
         Raises:
             TrainingError: If execution fails at any stage.
         """
-        data_path = Path(raw_data_path or self.config.data.raw_file)
+        data_path = Path(raw_data_path) if raw_data_path else self.config.data.get_raw_file_path()
         if not data_path.exists():
             raise TrainingError(
                 f"Raw dataset file not found at: {data_path}. "
@@ -78,22 +75,13 @@ class TrainingPipeline:
         train_labels = [str(l) for l in train_ds.get_labels()]
         self.feature_builder.fit(train_seqs, train_labels)
 
-        X_train = self.feature_builder.transform_sequences(train_seqs)
-        y_train = self.feature_builder.transform_labels(train_labels)
-
-        val_seqs = val_ds.get_sequences()
-        val_labels = [str(l) for l in val_ds.get_labels()]
-        X_val = self.feature_builder.transform_sequences(val_seqs) if val_seqs else None
-        y_val = self.feature_builder.transform_labels(val_labels) if val_labels else None
-
         # Persist vectorizer and encoder artifacts
-        v_path = Path(self.config.paths.vectorizers_dir) / "kmer_vectorizer.joblib"
-        e_path = Path(self.config.paths.encoders_dir) / "label_encoder.joblib"
+        v_path = self.config.paths.get_vectorizers_dir() / "kmer_vectorizer.joblib"
+        e_path = self.config.paths.get_encoders_dir() / "label_encoder.joblib"
         self.feature_builder.save(v_path, e_path)
 
-        # TODO (Phase 2): Model training execution
-        # In this architectural setup phase, model training is deferred to Phase 2.
-        logger.info("Step 5: Model training deferred to Phase 2 (Architecture Foundation Phase).")
+        # In this architectural review phase, model training is deferred to Phase 3.
+        logger.info("Step 5: Model training deferred to Phase 3 (Benchmark and Training Phase).")
 
         return {
             "status": "pipeline_ready",
@@ -103,4 +91,3 @@ class TrainingPipeline:
             "vectorizer_path": str(v_path),
             "encoder_path": str(e_path),
         }
-

@@ -7,6 +7,7 @@ try:
 except ImportError:
     pd = None  # type: ignore
 
+from dna_cancer.data.ingestion import SimpleDataFrame
 from dna_cancer.data.validation import SequenceValidator
 from dna_cancer.preprocessing.sequence_cleaner import SequenceCleaner
 from dna_cancer.utils.exceptions import PreprocessingError
@@ -57,38 +58,69 @@ class SequenceProcessor:
         logger.info("Batch preprocessing finished: %s", stats)
         return cleaned_list, stats
 
+    def process_records(
+        self,
+        records: List[Dict[str, Any]],
+        sequence_key: str = "sequence",
+    ) -> Tuple[List[Dict[str, Any]], Dict[str, int]]:
+        """Process a list of record dictionaries in pure Python without requiring pandas."""
+        cleaned_records: List[Dict[str, Any]] = []
+        stats = {"total": len(records), "valid": 0, "dropped": 0}
+
+        for r in records:
+            if sequence_key not in r:
+                stats["dropped"] += 1
+                if not self.drop_invalid:
+                    raise PreprocessingError(f"Record missing sequence key '{sequence_key}': {r}")
+                continue
+
+            cleaned = self.process_single(str(r[sequence_key]))
+            if cleaned is not None:
+                record_copy = dict(r)
+                record_copy[sequence_key] = cleaned
+                record_copy["len"] = len(cleaned)
+                cleaned_records.append(record_copy)
+                stats["valid"] += 1
+            else:
+                stats["dropped"] += 1
+
+        logger.info("Record preprocessing finished: %s", stats)
+        return cleaned_records, stats
+
     def process_dataframe(
         self,
         df: Any,
         sequence_column: str = "sequence",
         output_column: Optional[str] = None,
     ) -> Any:
-        """Process sequences within a pandas DataFrame.
+        """Process sequences within a pandas DataFrame or SimpleDataFrame.
 
         Filters out invalid rows and updates sequence lengths.
         """
-        if pd is None:
-            raise PreprocessingError("pandas is required for process_dataframe. Please install pandas.")
-
-        if sequence_column not in df.columns:
-            raise PreprocessingError(f"Column '{sequence_column}' not found in DataFrame.")
+        if sequence_column not in getattr(df, "columns", []):
+            raise PreprocessingError(f"Column '{sequence_column}' not found in dataset.")
 
         target_col = output_column or sequence_column
-        df_copy = df.copy()
 
-        # Clean sequences
-        cleaned_series = df_copy[sequence_column].astype(str).apply(self.cleaner.clean)
+        if pd is not None and isinstance(df, pd.DataFrame):
+            df_copy = df.copy()
+            cleaned_series = df_copy[sequence_column].astype(str).apply(self.cleaner.clean)
+            valid_mask = cleaned_series.apply(self.validator.is_valid)
+            dropped_count = int((~valid_mask).sum())
 
-        # Validate
-        valid_mask = cleaned_series.apply(self.validator.is_valid)
-        dropped_count = int((~valid_mask).sum())
+            if dropped_count > 0:
+                logger.warning("Dropping %d invalid sequence rows out of %d", dropped_count, len(df_copy))
+                df_copy = df_copy[valid_mask].copy()
+                cleaned_series = cleaned_series[valid_mask]
 
-        if dropped_count > 0:
-            logger.warning("Dropping %d invalid sequence rows out of %d", dropped_count, len(df_copy))
-            df_copy = df_copy[valid_mask].copy()
-            cleaned_series = cleaned_series[valid_mask]
-
-        df_copy[target_col] = cleaned_series
-        df_copy["len"] = df_copy[target_col].str.len()
-
-        return df_copy
+            df_copy[target_col] = cleaned_series
+            df_copy["len"] = df_copy[target_col].str.len()
+            return df_copy
+        else:
+            # Fallback for SimpleDataFrame or dict-like tables
+            records = df.to_dict(orient="records") if hasattr(df, "to_dict") else [dict(r) for _, r in df.iterrows()]
+            cleaned_records, _ = self.process_records(records, sequence_key=sequence_column)
+            if target_col != sequence_column:
+                for r in cleaned_records:
+                    r[target_col] = r[sequence_column]
+            return SimpleDataFrame(cleaned_records)
