@@ -1,8 +1,8 @@
 {
-  "status": "LOCKED",
-  "unsealed": false,
-  "unseal_count": 0,
-  "unsealed_at": null,
-  "unseal_token": null,
-  "unseal_reason": null
+  "status": "UNSEALED",
+  "unsealed": true,
+  "unseal_count": 1,
+  "unsealed_at": "2026-11-04T20:45:07.163185",
+  "unseal_token": "PHASE_5_FINAL_UNSEAL",
+  "unseal_reason": "Official Phase 6 Final One-Shot Holdout Evaluation of frozen candidate 'canonical_comp_linear_svc_k4_standard' on unseen Tier 2 holdout (N=240)."
 }

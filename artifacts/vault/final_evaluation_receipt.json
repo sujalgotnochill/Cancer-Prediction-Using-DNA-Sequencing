@@ -1,0 +1,31 @@
+{
+  "receipt_version": "1.0.0",
+  "event_identifier": "FINAL_HOLDOUT_EVALUATION",
+  "evaluation_timestamp": "2026-11-04T20:45:06.846642",
+  "evaluator_version": "FinalHoldoutEvaluator v1.0.0",
+  "unseal_count": 1,
+  "authorization_token_hash": "cb90858fbd0a5446",
+  "cryptographic_verification": {
+    "model_joblib_sha256": "1422d3163b1d33bb84052f40bbb7466476a36ecadf85dd440d6278844faff386",
+    "vectorizer_joblib_sha256": "a034de878fac4ba7401f13555b4b5aa6509e11fc282754ae526645b2668093c8",
+    "encoder_joblib_sha256": "3c78f7eee9e9be78349cf8a3c3bcee02a0efaad961252f727bb2b43065c9015c",
+    "model_config_sha256": "35fe8ec22804993160e649cd19c82e2270f4bec09840099f8efa7a8dc0984aae",
+    "development_cohort_sha256": "7c35fc4f226488cfc2d37ed332746be3f3c1aa8982ab7a8991c7fb374781475c",
+    "sealed_holdout_sha256": "430a2e6f8b4b85dfb8bd6a16300e44417a374853a2eb7616a8e5d6d9116db940"
+  },
+  "final_metric_summary": {
+    "accuracy": 0.9125,
+    "accuracy_95ci": [
+      0.8699448520048005,
+      0.9420581640434134
+    ],
+    "macro_f1": 0.9105057536329542,
+    "macro_precision": 0.9145205506372024,
+    "macro_recall": 0.9125,
+    "cervical_recall": 0.7666666666666667,
+    "colorectal_recall": 0.9,
+    "endometrial_recall": 0.9833333333333333,
+    "liver_recall": 1.0
+  },
+  "scientific_disclaimer": "Educational DNA sequence-source classification benchmark. Sequences originate from human chromosome 15 transcripts and bacterial genomic assemblies. Not validated for clinical cancer diagnosis."
+}

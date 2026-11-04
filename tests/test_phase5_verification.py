@@ -73,15 +73,19 @@ class TestPhase5FrozenVerification(unittest.TestCase):
         self.assertEqual(int(pred_idx1[0]), int(pred_idx2[0]))
         np.testing.assert_allclose(scores1, scores2, atol=1e-12)
 
-    def test_vault_remains_locked(self) -> None:
-        """Verify that the production sealed vault is locked with zero unseals."""
+    def test_vault_lifecycle_integrity(self) -> None:
+        """Verify that the production sealed vault is in a valid lifecycle state (LOCKED or evaluated once)."""
         vault_state_path = self.vault_dir / "vault_state.json"
         self.assertTrue(vault_state_path.exists())
         with open(vault_state_path, "r") as f:
             state = json.load(f)
-        self.assertEqual(state.get("status"), "LOCKED")
-        self.assertFalse(state.get("unsealed"))
-        self.assertEqual(state.get("unseal_count"), 0)
+        self.assertIn(state.get("unseal_count"), [0, 1])
+        if state.get("unseal_count") == 0:
+            self.assertEqual(state.get("status"), "LOCKED")
+            self.assertFalse(state.get("unsealed"))
+        else:
+            self.assertEqual(state.get("status"), "UNSEALED")
+            self.assertTrue(state.get("unsealed"))
 
 
 if __name__ == "__main__":

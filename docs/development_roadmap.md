@@ -280,13 +280,43 @@ This roadmap outlines the systematic evolution of the project from the initial s
 
 ---
 
-## Phase 6: Final Sealed Test Vault Evaluation & Serving Interface (Next)
-- [ ] Final One-Shot Evaluation on Tier 2 Sealed Test Vault:
-  - Call `FinalHoldoutEvaluator.evaluate_frozen_model()` strictly once with frozen configuration (`is_frozen: True`) and authorization token `PHASE_5_FINAL_UNSEAL`.
-  - Unseal holdout ($N=240$) and evaluate generalization performance on previously unseen gene families (`GOLGA6L22`, `POTEB2`, etc.).
-  - Report unbiased test metrics with 95% Wilson Score CIs for accuracy and class recalls, and 1,000-iteration Bootstrap CI for Macro F1.
-  - Record audit event in `artifacts/vault/evaluation_events.jsonl` and lock vault state to `PERMANENTLY_EVALUATED`.
+## Phase 6: Final Sealed Test Vault Evaluation (Completed)
+- [x] Pre-unseal readiness checks passed:
+  - Verified frozen candidate model configuration (`artifacts/models/phase5_best_candidate/model_config.json`, `"is_frozen": True`).
+  - Verified artifact checksums against `checksums.sha256`.
+  - Verified development cohort SHA-256 (`7c35fc4f...`) and holdout SHA-256 (`430a2e6f...`) against manifest.
+  - Confirmed vault was locked with `unseal_count == 0` and zero prior evaluation events.
+  - Documented that `LinearSVC` uses standard decision scores and lacks a genuine probability calibration module.
+- [x] Official one-shot holdout evaluation executed:
+  - Unsealed `artifacts/vault/test_holdout_sealed.json` ($N=240$, 60 samples per class) strictly once via `FinalHoldoutEvaluator`.
+  - Forward-pass inference without refitting or adaptation.
+  - Overall holdout accuracy: **91.25%** (219/240 correct, 95% Wilson Score CI: [86.99%, 94.21%]).
+  - Holdout Macro F1: **0.9105** (Macro Precision: 0.9145, Macro Recall: 0.9125, Weighted F1: 0.9105).
+  - Per-class recall and Wilson 95% CIs:
+    * Cervical Cancer (Human): **76.67%** (46/60, 95% CI: [64.56%, 85.56%], F1: 0.8440)
+    * Colorectal Cancer (Bacterial): **90.00%** (54/60, 95% CI: [79.85%, 95.34%], F1: 0.8852)
+    * Endometrial Cancer (Bacterial): **98.33%** (59/60, 95% CI: [91.14%, 99.71%], F1: 0.9291)
+    * Liver Cancer (Bacterial): **100.00%** (60/60, 95% CI: [93.98%, 100.00%], F1: 0.9836)
+- [x] In-depth holdout error analysis:
+  - 14 Cervical errors: concentrated in ultra-short `SNURF` (3/3 errors, 216 bp with sparse 4-mers), `GABRA5` (7/7 errors), and `GABRB3` (4/6 errors).
+  - Perfect 100% generalization on 5 unseen holdout gene groups: `TUBGCP5` (17/17), `CYFIP1` (10/10), `ATP10A` (9/9), `POTEB` (4/4), `POTEB2` (4/4) -> 44/44 correct.
+  - Bacterial contig accuracy remained exceptionally high: 96.1% (173/180 correct).
+- [x] Post-evaluation security & permanent lock:
+  - Vault state updated to `status: "UNSEALED"`, `unseal_count: 1`.
+  - Confirmed exactly 1 evaluation event in `artifacts/vault/evaluation_events.jsonl`.
+  - Confirmed repeated evaluation attempts are strictly blocked with `PermissionError`.
+- [x] Author Phase 6 deliverables:
+  - `docs/final_model_evaluation.md`
+  - `artifacts/evaluation/final_holdout_results.json`
+  - `artifacts/evaluation/final_confusion_matrix.png`
+  - `artifacts/evaluation/final_classification_report.json`
+  - `artifacts/vault/final_evaluation_receipt.json`
+
+---
+
+## Phase 6.1: Web Application & Serving Interface (Next)
 - [ ] Implement lightweight web application in `app/` (FastAPI or Flask).
 - [ ] Interactive interface for FASTA/raw sequence input and validation.
-- [ ] Visual probability distribution plots for predicted classes with calibrated Platt/softmax confidence.
-- [ ] Exportable prediction reports for exploratory sequence research.
+- [ ] Visual decision score margin plots and sequence source classification display.
+- [ ] Prominent educational sequence-source disclaimer display.
+- [ ] Exportable prediction reports for exploratory genomics research.
