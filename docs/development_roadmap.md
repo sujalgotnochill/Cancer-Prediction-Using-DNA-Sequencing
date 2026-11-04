@@ -249,6 +249,37 @@ This roadmap outlines the systematic evolution of the project from the initial s
 
 ---
 
+## Phase 5.1: Frozen Model Verification and Final Evaluation Readiness (Completed)
+- [x] Frozen model artifact verification:
+  - Validated `model.joblib`, `vectorizer.joblib`, `encoder.joblib`, and `model_config.json`.
+  - Confirmed `LinearSVC` architecture, $k=4$ TF-IDF configuration, and 256-dimensional feature space.
+  - Verified 4 target classes and dimension parity (256 == 256).
+  - Confirmed zero leaked training/validation sequences or raw samples in serialized binaries.
+  - Generated and stored cryptographic ledger: `artifacts/models/phase5_best_candidate/checksums.sha256`.
+- [x] Bit-level prediction consistency:
+  - Evaluated 8 development cohort samples across all 4 classes.
+  - Confirmed 100% identical predicted labels between in-memory trained pipeline and reloaded disk artifacts.
+  - Confirmed exact bit-level decision score parity ($0.00 \times 10^0$ difference) under sparse solver.
+- [x] Cross-validation results and metric auditing:
+  - Confirmed reported Macro F1 (0.9671) and documented standard deviation convention (population std $\sigma = 0.0063$, sample std $s = 0.0078$).
+  - Verified Cervical recall fold-by-fold: Fold 0 (`SNRPN`) = 1.0000, Fold 1 = 0.9844, Fold 2 = 0.9688.
+  - Traced all 3 Cervical errors to source records (`NDN` sample 113, `NIPA1` samples 23 & 24).
+  - Audited secondary 10-iteration Group-ShuffleSplit non-independence disclosure.
+- [x] End-to-end reproducibility verification:
+  - Re-ran 3-fold grouped CV from scratch on `data/processed/development_cohort.csv`.
+  - Confirmed exact parity with Phase 5 records (reproduced Macro F1: 0.967062, absolute difference: $0.00 \times 10^0$).
+- [x] Sealed Test Vault audit:
+  - Verified `status: "LOCKED"`, `unseal_count: 0`, and zero evaluation events in audit ledger.
+  - Verified holdout file SHA-256 (`430a2e6f...`) matches manifest without unsealing.
+  - Confirmed no holdout-exclusive genes leaked into development logs.
+- [x] Author Phase 5.1 deliverables:
+  - `docs/phase5_candidate_verification.md`
+  - `artifacts/models/phase5_best_candidate/checksums.sha256`
+  - `artifacts/evaluation/phase5_candidate_verification.json`
+  - `tests/test_phase5_verification.py` (Full test suite passing: 146 tests in 5.65s).
+
+---
+
 ## Phase 6: Final Sealed Test Vault Evaluation & Serving Interface (Next)
 - [ ] Final One-Shot Evaluation on Tier 2 Sealed Test Vault:
   - Call `FinalHoldoutEvaluator.evaluate_frozen_model()` strictly once with frozen configuration (`is_frozen: True`) and authorization token `PHASE_5_FINAL_UNSEAL`.
