@@ -92,6 +92,8 @@ artifacts/encoders/*
 !artifacts/encoders/.gitkeep
 artifacts/evaluation/*
 !artifacts/evaluation/.gitkeep
+artifacts/datasets/*
+!artifacts/datasets/.gitkeep
 
 # Raw archive formats
 *.zip

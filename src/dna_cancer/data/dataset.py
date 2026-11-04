@@ -9,24 +9,11 @@ except ImportError:
     pd = None  # type: ignore
 
 from dna_cancer.data.ingestion import SimpleDataFrame
+from dna_cancer.data.schema import CancerSequenceSample, DNASample, SampleMetadata
 from dna_cancer.utils.exceptions import DataValidationError
 from dna_cancer.utils.logger import get_logger
 
 logger = get_logger(__name__)
-
-
-@dataclass
-class CancerSequenceSample:
-    """Representation of an individual DNA sequence sample."""
-    sequence: str
-    label: Optional[str] = None
-    sample_id: Optional[str] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
-
-    @property
-    def length(self) -> int:
-        """Length of nucleotide sequence."""
-        return len(self.sequence)
 
 
 class DNADataset:
@@ -34,14 +21,14 @@ class DNADataset:
 
     def __init__(
         self,
-        samples: List[CancerSequenceSample],
+        samples: List[DNASample],
     ) -> None:
         self.samples = samples
 
     def __len__(self) -> int:
         return len(self.samples)
 
-    def __getitem__(self, idx: int) -> CancerSequenceSample:
+    def __getitem__(self, idx: int) -> DNASample:
         return self.samples[idx]
 
     def get_sequences(self) -> List[str]:

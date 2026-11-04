@@ -1,6 +1,8 @@
-"""Data ingestion module for loading sequences and datasets from various formats."""
+"""Data ingestion module supporting CSV, FASTA, JSON, and JSONL formats."""
 
 import csv
+import json
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional, Tuple, Union
 
@@ -9,10 +11,87 @@ try:
 except ImportError:
     pd = None  # type: ignore
 
+from dna_cancer.data.schema import CancerSequenceSample, DNASample, SampleMetadata
 from dna_cancer.utils.exceptions import DataIngestionError
 from dna_cancer.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+@dataclass
+class ColumnMapping:
+    """Configurable column name mapping for tabular or JSON datasets.
+
+    Allows ingesting external datasets that use custom column names (e.g., 'DNA_SEQ', 'DIAGNOSIS').
+    """
+    sequence_col: str = "sequence"
+    label_col: Optional[str] = "cancer"
+    id_col: Optional[str] = "id"
+    patient_id_col: Optional[str] = "patient_id"
+    organism_col: Optional[str] = "organism"
+    gene_col: Optional[str] = "gene"
+    locus_col: Optional[str] = "locus"
+    chromosome_col: Optional[str] = "chromosome"
+    source_col: Optional[str] = "source"
+    platform_col: Optional[str] = "sequencing_platform"
+    custom_mappings: Dict[str, str] = field(default_factory=dict)
+
+
+class FastaLabelMapper:
+    """Explicit mapping from FASTA record identifiers to cancer labels.
+
+    FASTA files do not inherently store phenotypic or disease labels. This mapper enforces
+    explicit, documented label association without inferring labels from sequence IDs.
+    """
+
+    def __init__(
+        self,
+        mapping: Optional[Dict[str, str]] = None,
+        default_label: Optional[str] = None,
+    ) -> None:
+        self.mapping = mapping or {}
+        self.default_label = default_label
+
+    def get_label(self, record_id: str) -> Optional[str]:
+        """Look up cancer label for a FASTA record identifier."""
+        if record_id in self.mapping:
+            return self.mapping[record_id]
+        return self.default_label
+
+    @classmethod
+    def from_dict(cls, mapping_dict: Dict[str, str], default_label: Optional[str] = None) -> "FastaLabelMapper":
+        return cls(mapping=mapping_dict, default_label=default_label)
+
+    @classmethod
+    def from_file(
+        cls,
+        file_path: Union[str, Path],
+        id_col: str = "id",
+        label_col: str = "label",
+        default_label: Optional[str] = None,
+    ) -> "FastaLabelMapper":
+        """Load ID-to-label mapping from a CSV or JSON file."""
+        path = Path(file_path)
+        if not path.exists():
+            raise DataIngestionError(f"FASTA label mapping file not found: {path}")
+
+        mapping: Dict[str, str] = {}
+        if path.suffix.lower() == ".json":
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, dict):
+                    mapping = {str(k): str(v) for k, v in data.items()}
+                else:
+                    raise DataIngestionError(f"Expected JSON object in {path}, got {type(data).__name__}")
+        else:
+            with open(path, "r", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    if id_col in row and label_col in row:
+                        mapping[str(row[id_col])] = str(row[label_col])
+
+        logger.info("Loaded %d explicit FASTA label mappings from %s", len(mapping), path)
+        return cls(mapping=mapping, default_label=default_label)
 
 
 class SimpleDataFrame:
@@ -62,21 +141,7 @@ def load_csv(
     expected_columns: Optional[List[str]] = None,
     **kwargs: Any,
 ) -> Any:
-    """Load a CSV file containing DNA sequences and metadata.
-
-    Uses pandas if installed; falls back to standard-library csv.DictReader if unavailable.
-
-    Args:
-        file_path: Path to the CSV file.
-        expected_columns: Optional list of column names to check after loading.
-        **kwargs: Additional keyword arguments passed to pandas.read_csv if pandas is available.
-
-    Returns:
-        pandas.DataFrame or SimpleDataFrame instance.
-
-    Raises:
-        DataIngestionError: If file not found, empty, or missing required columns.
-    """
+    """Load a CSV file containing DNA sequences and metadata."""
     path = Path(file_path)
     if not path.exists():
         raise DataIngestionError(f"CSV file not found: {path}")
@@ -91,7 +156,6 @@ def load_csv(
         except Exception as exc:
             raise DataIngestionError(f"Failed to load CSV from {path}: {exc}") from exc
     else:
-        # Standard-library fallback
         try:
             with open(path, "r", encoding="utf-8", errors="replace") as f:
                 reader = csv.DictReader(f)
@@ -118,19 +182,7 @@ def load_csv(
 
 
 def parse_fasta_records(file_path: Union[str, Path]) -> List[Dict[str, Any]]:
-    """Parse a FASTA file using standard Python line parsing without external dependencies.
-
-    Validates header structure and sequence completeness.
-
-    Args:
-        file_path: Path to the FASTA file.
-
-    Returns:
-        List of dictionaries containing 'id', 'description', 'sequence', and 'len'.
-
-    Raises:
-        DataIngestionError: If file is missing, empty, malformed, or missing sequence lines.
-    """
+    """Parse a FASTA file using standard Python line parsing without external dependencies."""
     path = Path(file_path)
     if not path.exists():
         raise DataIngestionError(f"FASTA file not found: {path}")
@@ -208,18 +260,7 @@ def load_fasta_as_dataframe(
     file_path: Union[str, Path],
     cancer_label: Optional[str] = None,
 ) -> Any:
-    """Load a FASTA file into a DataFrame or SimpleDataFrame with optional target label.
-
-    Args:
-        file_path: Path to the FASTA file.
-        cancer_label: Optional cancer class label to assign to all sequences.
-
-    Returns:
-        DataFrame or SimpleDataFrame with columns ['id', 'description', 'sequence', 'len', 'cancer'].
-
-    Raises:
-        DataIngestionError: If file parsing fails or cancer_label is invalid.
-    """
+    """Load a FASTA file into a DataFrame or SimpleDataFrame with optional target label."""
     if cancer_label is not None:
         if not isinstance(cancer_label, str) or not cancer_label.strip():
             raise DataIngestionError(f"cancer_label must be a non-empty string, got {cancer_label}")
@@ -232,3 +273,167 @@ def load_fasta_as_dataframe(
     if pd is not None:
         return pd.DataFrame(records)
     return SimpleDataFrame(records)
+
+
+def load_json(file_path: Union[str, Path]) -> List[Dict[str, Any]]:
+    """Load records from a standard JSON file.
+
+    Accepts either a JSON array of objects `[{...}]` or an object containing a 'samples' or 'records' key.
+    """
+    path = Path(file_path)
+    if not path.exists():
+        raise DataIngestionError(f"JSON file not found: {path}")
+    if path.stat().st_size == 0:
+        raise DataIngestionError(f"JSON file is empty: {path}")
+
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception as exc:
+        raise DataIngestionError(f"Failed to parse JSON file {path}: {exc}") from exc
+
+    if isinstance(data, list):
+        return data
+    elif isinstance(data, dict):
+        if "samples" in data and isinstance(data["samples"], list):
+            return data["samples"]
+        if "records" in data and isinstance(data["records"], list):
+            return data["records"]
+        return [data]
+    else:
+        raise DataIngestionError(f"Unexpected JSON structure in {path}: expected array or dict.")
+
+
+def load_jsonl(file_path: Union[str, Path]) -> List[Dict[str, Any]]:
+    """Load records from a newline-delimited JSON (JSONL) file."""
+    path = Path(file_path)
+    if not path.exists():
+        raise DataIngestionError(f"JSONL file not found: {path}")
+    if path.stat().st_size == 0:
+        raise DataIngestionError(f"JSONL file is empty: {path}")
+
+    records: List[Dict[str, Any]] = []
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            for line_no, line in enumerate(f, start=1):
+                line_str = line.strip()
+                if not line_str:
+                    continue
+                try:
+                    obj = json.loads(line_str)
+                    if isinstance(obj, dict):
+                        records.append(obj)
+                    else:
+                        raise DataIngestionError(f"Line {line_no} in {path} is not a JSON object.")
+                except json.JSONDecodeError as err:
+                    raise DataIngestionError(f"Invalid JSON at line {line_no} in {path}: {err}") from err
+    except Exception as exc:
+        if isinstance(exc, DataIngestionError):
+            raise
+        raise DataIngestionError(f"Error reading JSONL file {path}: {exc}") from exc
+
+    if not records:
+        raise DataIngestionError(f"No records found in JSONL file: {path}")
+
+    return records
+
+
+def load_samples(
+    file_path: Union[str, Path],
+    file_format: Optional[str] = None,
+    column_mapping: Optional[ColumnMapping] = None,
+    label_mapper: Optional[Union[FastaLabelMapper, Dict[str, str]]] = None,
+    default_label: Optional[str] = None,
+    dataset_id: Optional[str] = None,
+) -> List[DNASample]:
+    """Universal sequence loader ingesting CSV, FASTA, JSON, or JSONL into standardized DNASample objects.
+
+    Args:
+        file_path: Path to dataset file.
+        file_format: Optional format identifier ('csv', 'fasta', 'json', 'jsonl'). Auto-detected if None.
+        column_mapping: Optional ColumnMapping for renaming custom columns.
+        label_mapper: Optional FastaLabelMapper or dict mapping record IDs to labels.
+        default_label: Fallback label assigned if record does not have a mapped label.
+        dataset_id: Optional dataset identifier tagged onto sample metadata.
+
+    Returns:
+        List of standardized DNASample instances.
+    """
+    path = Path(file_path)
+    fmt = (file_format or path.suffix.lstrip(".").lower()).strip()
+    mapping = column_mapping or ColumnMapping()
+
+    # Normalize fasta format variants
+    if fmt in ("fa", "fna", "fasta"):
+        fmt = "fasta"
+    elif fmt in ("tsv", "csv"):
+        fmt = "csv"
+
+    samples: List[DNASample] = []
+
+    if fmt == "fasta":
+        records = parse_fasta_records(path)
+        mapper = (
+            label_mapper
+            if isinstance(label_mapper, FastaLabelMapper)
+            else (FastaLabelMapper(mapping=label_mapper, default_label=default_label) if label_mapper else FastaLabelMapper(default_label=default_label))
+        )
+
+        for rec in records:
+            r_id = rec["id"]
+            lbl = mapper.get_label(r_id)
+            meta = SampleMetadata(
+                dataset_id=dataset_id,
+                additional_metadata={"description": rec.get("description", "")},
+            )
+            samples.append(DNASample(sample_id=r_id, sequence=rec["sequence"], label=lbl, metadata=meta))
+
+    elif fmt in ("csv", "json", "jsonl"):
+        if fmt == "csv":
+            df = load_csv(path)
+            rows = df.to_dict(orient="records") if hasattr(df, "to_dict") else [dict(r) for _, r in df.iterrows()]
+        elif fmt == "json":
+            rows = load_json(path)
+        else:
+            rows = load_jsonl(path)
+
+        for idx, row in enumerate(rows):
+            id_key = mapping.id_col or "id"
+            raw_id = row.get(id_key)
+            if raw_id is None and id_key == "id":
+                raw_id = row.get("sample_id")
+            s_id = str(raw_id) if raw_id is not None else f"sample_{idx}"
+
+            seq = str(row.get(mapping.sequence_col, ""))
+
+            raw_label = row.get(mapping.label_col) if mapping.label_col else None
+            if raw_label is None:
+                if mapping.label_col == "cancer":
+                    raw_label = row.get("label")
+                elif mapping.label_col == "label":
+                    raw_label = row.get("cancer")
+            lbl = str(raw_label) if raw_label is not None and str(raw_label) != "nan" else default_label
+
+            meta = SampleMetadata(
+                dataset_id=dataset_id or row.get("dataset_id"),
+                source=row.get(mapping.source_col) if mapping.source_col else row.get("source"),
+                organism=row.get(mapping.organism_col) if mapping.organism_col else row.get("organism"),
+                gene=row.get(mapping.gene_col) if mapping.gene_col else row.get("gene"),
+                locus=row.get(mapping.locus_col) if mapping.locus_col else row.get("locus"),
+                chromosome=row.get(mapping.chromosome_col) if mapping.chromosome_col else row.get("chromosome"),
+                sequencing_platform=row.get(mapping.platform_col) if mapping.platform_col else row.get("sequencing_platform"),
+                patient_id=row.get(mapping.patient_id_col) if mapping.patient_id_col else row.get("patient_id"),
+            )
+
+            # Map any custom columns
+            for custom_key, target_field in mapping.custom_mappings.items():
+                if custom_key in row:
+                    meta.additional_metadata[target_field] = row[custom_key]
+
+            samples.append(DNASample(sample_id=s_id, sequence=seq, label=lbl, metadata=meta))
+
+    else:
+        raise DataIngestionError(f"Unsupported dataset format: '{fmt}'. Supported: csv, fasta, json, jsonl")
+
+    logger.info("Ingested %d DNASample objects from %s (format=%s)", len(samples), path, fmt)
+    return samples

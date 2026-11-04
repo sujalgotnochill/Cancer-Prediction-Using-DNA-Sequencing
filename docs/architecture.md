@@ -2,34 +2,39 @@
 
 ## 1. Architectural Overview
 
-The **DNA Cancer Classification** system is designed around clean architecture principles for machine learning systems: separation of concerns, modularity, reproducible configurations, decoupled components, and defensive validation.
+The **DNA Cancer Classification** system is built upon modular, clean architecture principles for machine learning and bioinformatics pipelines: strict separation of concerns, defensive validation, explicit data provenance, reproducible configurations, and zero leakage between data partitions.
 
-The system transforms biological DNA sequences into mathematical feature spaces using overlapping $k$-mers and vectorization methods, and maps them to oncological classification labels via pluggable statistical and machine learning classifiers.
+The system handles biological DNA sequences end-to-end: from multi-format ingestion, quality auditing, and persistent dataset registration through $k$-mer tokenization, sparse feature vectorization, and model training/inference.
 
 ```mermaid
 flowchart TD
-    subgraph Data Layer
-        RAW["Raw Data (FASTA / CSV)"] --> INGEST["Ingestion (ingestion.py)"]
-        INGEST --> VALID["Validation (validation.py)"]
-        VALID --> DS["Dataset Container (dataset.py)"]
+    subgraph Dataset Engineering & Management Layer
+        RAW["Raw Sources (CSV, FASTA, JSON, JSONL)"] --> INGEST["Multi-Format Ingestion (ingestion.py)"]
+        FASTA_MAP["Explicit FASTA Label Mapping (FastaLabelMapper)"] --> INGEST
+        COL_MAP["Column Mapping (ColumnMapping)"] --> INGEST
+        INGEST --> SCHEMA["Standardized Schema (DNASample, SampleMetadata)"]
+        SCHEMA --> QA["Quality & Validation Engine (quality.py)"]
+        QA --> PROF["Dataset Profiler (profiler.py)"]
+        QA --> REG["Persistent Registry (registry.py & registry.json)"]
+        PROF --> REPORTS["Reports (JSON & Markdown in artifacts/datasets/)"]
+        SCHEMA --> SPLIT["Leakage-Free Partitioning (splitter.py)"]
     end
 
     subgraph Preprocessing & Feature Engineering
-        DS --> CLEAN["Cleaning & Normalization (sequence_cleaner.py)"]
+        SPLIT --> CLEAN["Cleaning & Normalization (sequence_cleaner.py)"]
         CLEAN --> KMER["K-mer Extraction (kmer_extractor.py)"]
         KMER --> VEC["Feature Vectorization (feature_builder.py)"]
     end
 
     subgraph Modeling & Training
-        VEC --> SPLIT["Train / Val / Test Splits"]
-        SPLIT --> TRAIN["Trainer (trainer.py)"]
+        VEC --> TRAIN["Trainer (trainer.py)"]
         REGISTRY["Model Registry & Factory (registry.py, model_factory.py)"] --> TRAIN
         TRAIN --> CHECKPOINT["Model Artifacts (artifacts/models/)"]
     end
 
     subgraph Evaluation & Inference
         CHECKPOINT --> EVAL["Evaluator (evaluator.py)"]
-        SPLIT --> EVAL
+        VEC --> EVAL
         EVAL --> METRICS["Metrics & Reports (artifacts/evaluation/)"]
         CHECKPOINT --> PREDICT["Predictor (predictor.py)"]
         NEW_SEQ["Unseen DNA Sequence"] --> PREDICT
@@ -42,13 +47,31 @@ flowchart TD
 ## 2. Layer Decomposition
 
 ### 2.1 Configuration Layer (`configs/`, `src/dna_cancer/config/`)
-- **Centralized Declarative Settings:** Avoids magic constants and hardcoded paths. All parameters for data paths, $k$-mer extraction ($k=6$, stride $=1$), vectorization (Count/TF-IDF), and model architectures reside in YAML configurations (`configs/`).
-- **Resilient Fallback Parser:** Provides zero-dependency configuration loading while supporting PyYAML when installed.
+- **Declarative YAML Configurations:** Path mappings, sequence constraints, $k$-mer parameters ($k=6$, stride $=1$), vectorization methods, and training hyperparameters are isolated in YAML configuration files.
+- **Resilient Fallback Parser:** Provides zero-dependency configuration loading while supporting PyYAML when installed. Paths resolve relative to project root across Windows and POSIX platforms.
 
-### 2.2 Data Ingestion & Validation Layer (`src/dna_cancer/data/`)
-- **Ingestion (`ingestion.py`):** Loads raw genomic sequences from FASTA files and tabular CSV formats.
-- **Validation (`validation.py`):** Validates nucleotide characters against standard IUPAC alphabets (`ACGTN`), verifies sequence length bounds, and validates dataset column schemas.
-- **Dataset Abstraction (`dataset.py`):** Encapsulates sequence samples (`CancerSequenceSample`), provides class distribution metrics, and coordinates stratified train/validation/test splitting.
+### 2.2 Dataset Engineering & Management Layer (`src/dna_cancer/data/`)
+- **Unified Schema (`schema.py`):**
+  - Defines `DNASample` and `SampleMetadata`.
+  - Enforces sample identity, sequence data, and cancer labels while maintaining biological provenance (organism, gene, chromosome, platform, patient ID) strictly separate from prediction targets.
+  - Implements `compute_reverse_complement()` for strandedness analysis.
+- **Multi-Format Ingestion (`ingestion.py`):**
+  - Universal loader (`load_samples`) ingesting CSV, FASTA, JSON, and JSONL formats into standardized `DNASample` objects.
+  - Configurable `ColumnMapping` for datasets with heterogeneous column naming conventions.
+  - `FastaLabelMapper` for associating external phenotypic/disease annotations with FASTA sequence IDs without heuristics.
+- **Quality Assurance & Anomaly Detection (`quality.py`):**
+  - Detects duplicate sequences, duplicate sample IDs, conflicting annotations (identical sequence assigned differing cancer types), reverse-complement duplicates, invalid nucleotide characters, and class imbalance.
+  - Configurable duplicate handling policies via `DuplicatePolicy` (`REPORT_ONLY`, `KEEP_FIRST`, `REMOVE_ALL`, `ERROR`).
+- **Dataset Profiler (`profiler.py`):**
+  - Computes comprehensive sequence length statistics (min, max, mean, median, standard deviation, quartiles), nucleotide composition (A, C, G, T, N frequencies), overall GC-content, and metadata completeness.
+  - Exports dual-format reports: structured machine-readable JSON and human-readable GitHub Flavored Markdown in `artifacts/datasets/`.
+- **Persistent Dataset Registry (`registry.py`):**
+  - Transparent, lightweight JSON registry (`artifacts/datasets/registry.json`).
+  - Assigns unique dataset identifiers, tracks schema versions, records SHA-256 checksums to detect modifications, and supports semantic dataset versioning.
+- **Leakage-Free Splitting (`splitter.py`):**
+  - Implements grouped splitting (`split_grouped`), stratified splitting (`split_stratified`), and random splitting (`split_random`).
+  - Group-based splitting strictly isolates patient records (`patient_id`), guaranteeing zero patient overlap between train, validation, and test subsets.
+  - Automated strategy recommendation (`recommend_splitting_strategy`) based on dataset metadata inspection.
 
 ### 2.3 Preprocessing Layer (`src/dna_cancer/preprocessing/`)
 - **Sequence Cleaning (`sequence_cleaner.py`):** Strips whitespace, line breaks, carriage returns, and unsupported characters; standardizes casing and replaces or removes ambiguous nucleotides.
@@ -76,11 +99,10 @@ flowchart TD
 
 ## 3. Data Flow
 
-1. **Ingest:** Raw FASTA or CSV files are parsed from `data/raw/`.
-2. **Clean & Validate:** Sequences are filtered to ensure valid nucleotide composition and length constraints.
-3. **Partition:** Samples are partitioned into stratified training (70%), validation (15%), and test (15%) subsets.
-4. **Tokenize & Vectorize:** DNA sequences are decomposed into $k$-mers ($k=6$) and vectorized.
-5. **Train:** Classifiers are trained using the standardized `BaseDNAClassifier` interface.
-6. **Evaluate:** Predictions on held-out test data are evaluated, generating confusion matrices and classification reports.
-7. **Persist:** Fitted vectorizers, label encoders, model weights, and evaluation reports are archived in `artifacts/`.
-
+1. **Ingest & Map:** Raw FASTA, CSV, JSON, or JSONL files are ingested via `load_samples()`. External FASTA identifiers are mapped to cancer classes via `FastaLabelMapper`.
+2. **Quality Audit & Profiling:** The dataset is audited by `DatasetValidator` (detecting duplicates, conflicts, reverse complements) and profiled by `DatasetProfiler` (calculating GC-content, length distributions).
+3. **Registry Checkpoint:** Dataset metadata, format, sample count, and SHA-256 checksum are cataloged in `artifacts/datasets/registry.json`.
+4. **Leakage-Free Partition:** Samples are partitioned into train (70%), validation (15%), and test (15%) subsets using `split_grouped` (grouped by `patient_id` to prevent data leakage) or `split_stratified`.
+5. **Tokenize & Vectorize:** Cleaned sequences are tokenized into $k$-mers ($k=6$) and vectorized via count or TF-IDF vectorizers.
+6. **Train & Persist:** Models instantiated via `ModelFactory` are trained, evaluated on held-out test splits, and saved into `artifacts/models/`.
+7. **Predict:** Production sequences are passed to `DNAPredictor` for real-time inference with probability distributions.
