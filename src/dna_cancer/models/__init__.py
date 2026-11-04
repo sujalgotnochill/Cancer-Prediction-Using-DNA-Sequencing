@@ -2,6 +2,8 @@
 
 from dna_cancer.models.base_model import BaseDNAClassifier
 from dna_cancer.models.baseline_models import (
+    GradientBoostingClassifierWrapper,
+    LinearSVCClassifier,
     LogisticRegressionClassifier,
     MultinomialNBClassifier,
     RandomForestClassifierWrapper,
@@ -18,5 +20,7 @@ __all__ = [
     "MultinomialNBClassifier",
     "LogisticRegressionClassifier",
     "RandomForestClassifierWrapper",
+    "LinearSVCClassifier",
+    "GradientBoostingClassifierWrapper",
 ]
 

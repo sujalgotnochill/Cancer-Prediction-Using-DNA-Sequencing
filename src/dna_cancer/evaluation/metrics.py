@@ -59,6 +59,14 @@ def compute_classification_metrics(
         zero_division=0,
     )
 
+    per_class = {
+        cls_name: metrics_dict
+        for cls_name, metrics_dict in report.items()
+        if cls_name not in ("accuracy", "macro avg", "weighted avg")
+    }
+
+    labels = sorted(list(set(y_true_arr)))
+
     metrics = {
         "accuracy": acc,
         "precision_macro": prec_macro,
@@ -69,6 +77,8 @@ def compute_classification_metrics(
         "f1_weighted": f1_weighted,
         "confusion_matrix": cm,
         "classification_report": report,
+        "per_class": per_class,
+        "labels": labels,
     }
 
     logger.info("Evaluation metrics calculated: accuracy=%.4f, f1_macro=%.4f", acc, f1_macro)

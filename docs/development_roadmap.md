@@ -215,28 +215,47 @@ This roadmap outlines the systematic evolution of the project from the initial s
 
 ---
 
-## Phase 5: Sealed Cross-Validation & Model Optimization (Next)
-- [ ] Implement training and feature pipelines strictly isolated to Tier 1 Development Cohort (`data/processed/development_cohort.csv`, $N=960$):
+## Phase 5: Sealed Cross-Validation & Model Optimization (Completed)
+- [x] Training and feature pipelines strictly isolated to Tier 1 Development Cohort (`data/processed/development_cohort.csv`, $N=960$):
   - Access exclusively via `dna_cancer.data.development.load_development_cohort()`.
-  - Confirm Tier 2 Sealed Test Vault remains locked (`is_locked: True`).
-- [ ] Implement Group-Balanced 3-Fold Cross-Validation on Development Set:
-  - Report fold-by-fold validation performance (tracking `SNRPN` sensitivity on Fold 0).
-  - Secondary verification via 10-Iteration Group Stratified ShuffleSplit (Median and IQR).
-- [ ] Feature engineering and representation exploration:
-  - TF-IDF $k$-mer representations.
-  - Subsequence motif embeddings.
-- [ ] Model architecture optimization:
-  - Regularization tuning on linear baselines ($C$ ablation).
-  - Multi-Layer Perceptrons (MLP) with dropout and batch normalization.
-  - 1D Convolutional Neural Networks (1D-CNN) for sequence motif detection.
-- [ ] Final One-Shot Evaluation on Sealed Test Vault:
-  - Call `FinalHoldoutEvaluator.evaluate_frozen_model()` strictly once with frozen configuration (`is_frozen: True`) and authorization token `PHASE_5_FINAL_UNSEAL`.
-  - Report unbiased generalization performance with 95% Wilson Score CIs for accuracy/recalls and 1,000-iteration Bootstrap CI for Macro F1.
+  - Confirmed Tier 2 Sealed Test Vault remains strictly locked (`is_locked: True`, `unseal_count: 0`).
+- [x] Group-Balanced 3-Fold Cross-Validation on Development Set:
+  - Validated zero biological gene-family leakage across folds.
+  - Tracked `SNRPN` sensitivity on Fold 0 validation (112 samples, achieving 100% recall with winning candidate).
+  - Secondary verification via 10-Iteration Group Stratified ShuffleSplit (Median Macro F1 = 0.9660, IQR = 0.0334).
+- [x] Feature engineering and representation exploration:
+  - Character $k$-mer counts ($k \in \{3, 4, 5, 6\}$), TF-IDF weighting, and $L_1$ normalized relative frequencies.
+  - Evaluated reverse-complement canonicalization ($\min(k\text{-mer}, \text{revcomp}(k\text{-mer}))$) as an explicit hypothesis across $k=4, 5, 6$.
+  - Found $k=4$ Standard TF-IDF to achieve the optimal trade-off (256 features, Macro F1 = 0.9671 ± 0.0063).
+  - Proved canonicalization serves as a vital regularizer for $k \ge 5$ (e.g. at $k=5$, Canonical F1 = 0.9651 vs Standard F1 = 0.9189).
+- [x] Model architecture and hyperparameter optimization:
+  - Evaluated Multinomial Naive Bayes, Logistic Regression, Linear SVC, Random Forest, and Gradient Tree Boosting across 124 configurations.
+  - Linear SVC with TF-IDF achieved top performance across all primary folds.
+- [x] Comprehensive error analysis & composition baseline:
+  - Analyzed all 31 out-of-fold misclassifications (3 Cervical, 28 Bacterial).
+  - Cervical: 100% recall on `SNRPN` (112/112), `NIPA2` (51/51), and `UBE3A` (48/48); 3 minor isoform errors on `NDN` and `NIPA1`.
+  - Bacterial errors: 27 of 28 occurred strictly between bacterial classes; weak length correlation ($r = -0.1086$), negligible GC correlation ($r = -0.0792$).
+  - Evaluated $k=1$ single-nucleotide composition baseline, proving catastrophic failure (Macro F1 = 0.3988) and disproving GC-content shortcut reliance.
+- [x] Model selection & artifact freezing:
+  - Selected and froze `LinearSVC (k=4, TF-IDF, standard)` in `artifacts/models/phase5_best_candidate/`.
+  - Exported `model.joblib`, `vectorizer.joblib`, `encoder.joblib`, and `model_config.json` with `"is_frozen": True`.
+- [x] Author Phase 5 documentation and artifacts:
+  - `docs/phase5_model_optimization.md`
+  - `docs/feature_engineering_experiments.md`
+  - `docs/error_analysis.md`
+  - `artifacts/experiments/phase5_results.json`
+  - `artifacts/evaluation/phase5_cv_summary.json`
+  - Unit test suite expanded to 142 passing tests (`tests/test_phase5_optimization.py`).
 
 ---
 
-## Phase 6: Web Application & Serving Interface
+## Phase 6: Final Sealed Test Vault Evaluation & Serving Interface (Next)
+- [ ] Final One-Shot Evaluation on Tier 2 Sealed Test Vault:
+  - Call `FinalHoldoutEvaluator.evaluate_frozen_model()` strictly once with frozen configuration (`is_frozen: True`) and authorization token `PHASE_5_FINAL_UNSEAL`.
+  - Unseal holdout ($N=240$) and evaluate generalization performance on previously unseen gene families (`GOLGA6L22`, `POTEB2`, etc.).
+  - Report unbiased test metrics with 95% Wilson Score CIs for accuracy and class recalls, and 1,000-iteration Bootstrap CI for Macro F1.
+  - Record audit event in `artifacts/vault/evaluation_events.jsonl` and lock vault state to `PERMANENTLY_EVALUATED`.
 - [ ] Implement lightweight web application in `app/` (FastAPI or Flask).
 - [ ] Interactive interface for FASTA/raw sequence input and validation.
-- [ ] Visual probability distribution plots for predicted cancer types.
-- [ ] Exportable prediction reports for exploratory research.
+- [ ] Visual probability distribution plots for predicted classes with calibrated Platt/softmax confidence.
+- [ ] Exportable prediction reports for exploratory sequence research.

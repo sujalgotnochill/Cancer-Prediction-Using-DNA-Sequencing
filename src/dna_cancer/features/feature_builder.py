@@ -34,10 +34,14 @@ class FeatureBuilder:
         ngram_range: Tuple[int, int] = (1, 1),
         max_features: Optional[int] = None,
         return_sparse: bool = False,
+        canonical: bool = False,
     ) -> None:
         self.k = k
         self.stride = stride
-        self.kmer_extractor = KMerExtractor(k=k, stride=stride, to_lower=True, as_sentence=True)
+        self.canonical = canonical
+        self.kmer_extractor = KMerExtractor(
+            k=k, stride=stride, to_lower=True, as_sentence=True, canonical=canonical
+        )
         self.vectorizer_type = vectorizer_type.lower()
         self.ngram_range = ngram_range
         self.max_features = max_features
@@ -46,10 +50,27 @@ class FeatureBuilder:
         self.vectorizer = None
         if self.vectorizer_type == "count":
             if CountVectorizer is not None:
-                self.vectorizer = CountVectorizer(ngram_range=self.ngram_range, max_features=self.max_features)
+                self.vectorizer = CountVectorizer(
+                    ngram_range=self.ngram_range,
+                    max_features=self.max_features,
+                    token_pattern=r"\S+",
+                )
         elif self.vectorizer_type == "tfidf":
             if TfidfVectorizer is not None:
-                self.vectorizer = TfidfVectorizer(ngram_range=self.ngram_range, max_features=self.max_features)
+                self.vectorizer = TfidfVectorizer(
+                    ngram_range=self.ngram_range,
+                    max_features=self.max_features,
+                    token_pattern=r"\S+",
+                )
+        elif self.vectorizer_type in ("frequency", "normalized"):
+            if TfidfVectorizer is not None:
+                self.vectorizer = TfidfVectorizer(
+                    use_idf=False,
+                    norm="l1",
+                    ngram_range=self.ngram_range,
+                    max_features=self.max_features,
+                    token_pattern=r"\S+",
+                )
         else:
             raise FeatureExtractionError(f"Unsupported vectorizer type: {vectorizer_type}")
 
