@@ -18,6 +18,27 @@ from dna_cancer.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
+def validate_not_sealed_vault_path(path: Union[str, Path], allow_vault: bool = False) -> None:
+    """Enforce architectural boundary preventing ordinary dataset ingestion from loading sealed holdout vault files.
+
+    Args:
+        path: Path to check.
+        allow_vault: If True, bypass this check (strictly for authorized internal vault mechanisms).
+
+    Raises:
+        PermissionError: If path references the sealed holdout data file.
+    """
+    if allow_vault:
+        return
+    p_str = str(Path(path).as_posix()).lower()
+    if "test_holdout_sealed" in p_str or ("artifacts/vault" in p_str and "manifest" not in p_str and "state" not in p_str and "events" not in p_str):
+        raise PermissionError(
+            f"Direct access to sealed holdout vault path '{path}' is prohibited during ordinary dataset ingestion. "
+            "Development workflows must load 'data/processed/development_cohort.csv'. "
+            "Final holdout evaluation must proceed exclusively through FinalHoldoutEvaluator."
+        )
+
+
 @dataclass
 class ColumnMapping:
     """Configurable column name mapping for tabular or JSON datasets.
@@ -139,9 +160,11 @@ class SimpleDataFrame:
 def load_csv(
     file_path: Union[str, Path],
     expected_columns: Optional[List[str]] = None,
+    allow_vault: bool = False,
     **kwargs: Any,
 ) -> Any:
     """Load a CSV file containing DNA sequences and metadata."""
+    validate_not_sealed_vault_path(file_path, allow_vault=allow_vault)
     path = Path(file_path)
     if not path.exists():
         raise DataIngestionError(f"CSV file not found: {path}")
@@ -275,11 +298,12 @@ def load_fasta_as_dataframe(
     return SimpleDataFrame(records)
 
 
-def load_json(file_path: Union[str, Path]) -> List[Dict[str, Any]]:
+def load_json(file_path: Union[str, Path], allow_vault: bool = False) -> List[Dict[str, Any]]:
     """Load records from a standard JSON file.
 
     Accepts either a JSON array of objects `[{...}]` or an object containing a 'samples' or 'records' key.
     """
+    validate_not_sealed_vault_path(file_path, allow_vault=allow_vault)
     path = Path(file_path)
     if not path.exists():
         raise DataIngestionError(f"JSON file not found: {path}")
@@ -304,8 +328,9 @@ def load_json(file_path: Union[str, Path]) -> List[Dict[str, Any]]:
         raise DataIngestionError(f"Unexpected JSON structure in {path}: expected array or dict.")
 
 
-def load_jsonl(file_path: Union[str, Path]) -> List[Dict[str, Any]]:
+def load_jsonl(file_path: Union[str, Path], allow_vault: bool = False) -> List[Dict[str, Any]]:
     """Load records from a newline-delimited JSON (JSONL) file."""
+    validate_not_sealed_vault_path(file_path, allow_vault=allow_vault)
     path = Path(file_path)
     if not path.exists():
         raise DataIngestionError(f"JSONL file not found: {path}")
@@ -345,6 +370,7 @@ def load_samples(
     label_mapper: Optional[Union[FastaLabelMapper, Dict[str, str]]] = None,
     default_label: Optional[str] = None,
     dataset_id: Optional[str] = None,
+    allow_vault: bool = False,
 ) -> List[DNASample]:
     """Universal sequence loader ingesting CSV, FASTA, JSON, or JSONL into standardized DNASample objects.
 
@@ -355,10 +381,12 @@ def load_samples(
         label_mapper: Optional FastaLabelMapper or dict mapping record IDs to labels.
         default_label: Fallback label assigned if record does not have a mapped label.
         dataset_id: Optional dataset identifier tagged onto sample metadata.
+        allow_vault: If True, allow access to vault files (internal authorization only).
 
     Returns:
         List of standardized DNASample instances.
     """
+    validate_not_sealed_vault_path(file_path, allow_vault=allow_vault)
     path = Path(file_path)
     fmt = (file_format or path.suffix.lstrip(".").lower()).strip()
     mapping = column_mapping or ColumnMapping()

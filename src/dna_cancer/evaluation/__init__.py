@@ -1,6 +1,7 @@
 """Evaluation metrics and assessment modules."""
 
 from dna_cancer.evaluation.evaluator import Evaluator
+from dna_cancer.evaluation.final_evaluator import FinalHoldoutEvaluator
 from dna_cancer.evaluation.metrics import compute_classification_metrics
 from dna_cancer.evaluation.visualization import (
     plot_confusion_matrix,
@@ -11,6 +12,7 @@ from dna_cancer.evaluation.visualization import (
 
 __all__ = [
     "Evaluator",
+    "FinalHoldoutEvaluator",
     "compute_classification_metrics",
     "plot_model_comparison",
     "plot_confusion_matrix",

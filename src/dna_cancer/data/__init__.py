@@ -7,6 +7,11 @@ from dna_cancer.data.fasta_inspector import (
     inspect_collection,
     inspect_fasta_file,
 )
+from dna_cancer.data.development import (
+    get_development_cv_folds,
+    load_development_cohort,
+    load_development_dataframe,
+)
 from dna_cancer.data.ingestion import (
     ColumnMapping,
     FastaLabelMapper,
@@ -17,6 +22,7 @@ from dna_cancer.data.ingestion import (
     load_jsonl,
     load_samples,
     parse_fasta_records,
+    validate_not_sealed_vault_path,
 )
 from dna_cancer.data.profiler import DatasetProfile, DatasetProfiler
 from dna_cancer.data.quality import DatasetValidator, DuplicatePolicy, QualityCheckResult
@@ -59,6 +65,11 @@ __all__ = [
     "load_jsonl",
     "load_samples",
     "parse_fasta_records",
+    "validate_not_sealed_vault_path",
+    # Development Cohort
+    "load_development_cohort",
+    "load_development_dataframe",
+    "get_development_cv_folds",
     # Dataset container
     "DNADataset",
     # Validation & Quality

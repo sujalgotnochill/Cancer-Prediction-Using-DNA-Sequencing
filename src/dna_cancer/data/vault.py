@@ -224,29 +224,49 @@ class SealedVault:
 
     def is_locked(self) -> bool:
         """Check whether the sealed test vault is currently locked."""
-        if not self.state_path.exists():
+        if not self.vault_data_path.exists():
             return True
-        with open(self.state_path, "r", encoding="utf-8") as f:
-            state = json.load(f)
+        if not self.state_path.exists():
+            raise DataValidationError(
+                f"Sealed vault data exists at {self.vault_data_path} but vault state file {self.state_path} is missing. "
+                "State file deletion or tampering detected."
+            )
+        try:
+            with open(self.state_path, "r", encoding="utf-8") as f:
+                state = json.load(f)
+        except Exception as err:
+            raise DataValidationError(f"Vault state file at {self.state_path} is corrupted: {err}") from err
         return not bool(state.get("unsealed", False))
 
     def get_vault_status(self) -> Dict[str, Any]:
         """Return the current procedural status of the sealed vault."""
         state = {}
         if self.state_path.exists():
-            with open(self.state_path, "r", encoding="utf-8") as f:
-                state = json.load(f)
+            try:
+                with open(self.state_path, "r", encoding="utf-8") as f:
+                    state = json.load(f)
+            except Exception:
+                state = {"status": "CORRUPTED"}
 
         manifest = {}
         if self.manifest_path.exists():
-            with open(self.manifest_path, "r", encoding="utf-8") as f:
-                manifest = json.load(f)
+            try:
+                with open(self.manifest_path, "r", encoding="utf-8") as f:
+                    manifest = json.load(f)
+            except Exception:
+                manifest = {}
+
+        is_locked_val = False
+        try:
+            is_locked_val = self.is_locked()
+        except DataValidationError:
+            is_locked_val = False
 
         return {
             "vault_exists": self.vault_data_path.exists(),
             "manifest_exists": self.manifest_path.exists(),
             "status": state.get("status", "NOT_INITIALIZED" if not self.vault_data_path.exists() else "LOCKED"),
-            "is_locked": self.is_locked(),
+            "is_locked": is_locked_val,
             "unsealed": state.get("unsealed", False),
             "unsealed_at": state.get("unsealed_at"),
             "unseal_count": state.get("unseal_count", 0),
@@ -257,23 +277,38 @@ class SealedVault:
 
     def verify_integrity(self) -> Dict[str, Any]:
         """Perform a forensic integrity audit on the sealed vault files and disjointness."""
-        if not self.manifest_path.exists() or not self.vault_data_path.exists():
-            return {
-                "is_valid": False,
-                "error": "Vault files or manifest missing.",
-            }
+        if not self.manifest_path.exists():
+            return {"is_valid": False, "error": f"Manifest missing at {self.manifest_path}"}
+        if not self.vault_data_path.exists():
+            return {"is_valid": False, "error": f"Vault data missing at {self.vault_data_path}"}
+        if not self.state_path.exists():
+            return {"is_valid": False, "error": f"Vault state file missing at {self.state_path}"}
 
-        with open(self.manifest_path, "r", encoding="utf-8") as f:
-            manifest = json.load(f)
+        try:
+            with open(self.manifest_path, "r", encoding="utf-8") as f:
+                manifest = json.load(f)
+        except Exception as err:
+            return {"is_valid": False, "error": f"Manifest corrupted: {err}"}
 
         holdout_sha = calculate_file_checksum(self.vault_data_path)
-        expected_holdout_sha = manifest["sealed_holdout"]["sha256"]
+        expected_holdout_sha = manifest.get("sealed_holdout", {}).get("sha256")
         sha_valid = (holdout_sha == expected_holdout_sha)
 
-        with open(self.vault_data_path, "r", encoding="utf-8") as f:
-            holdout_records = json.load(f)
+        try:
+            with open(self.vault_data_path, "r", encoding="utf-8") as f:
+                holdout_records = json.load(f)
+        except Exception as err:
+            return {"is_valid": False, "error": f"Holdout JSON corrupted: {err}"}
 
         count_valid = (len(holdout_records) == 240)
+
+        # Check dev cohort SHA if available
+        dev_sha_valid = True
+        if self.dev_cohort_path.exists():
+            expected_dev_sha = manifest.get("development_cohort", {}).get("sha256")
+            if expected_dev_sha:
+                actual_dev_sha = calculate_file_checksum(self.dev_cohort_path)
+                dev_sha_valid = (actual_dev_sha == expected_dev_sha)
 
         # Check sequence disjointness with dev cohort if available
         disjoint_valid = True
@@ -284,18 +319,37 @@ class SealedVault:
                 reader = csv.DictReader(f)
                 for row in reader:
                     dev_seqs.add(row["sequence"].strip().upper())
-            holdout_seqs = {r["sequence"].strip().upper() for r in holdout_records}
+            holdout_seqs = {r["sequence"].strip().upper() for r in holdout_records if "sequence" in r}
             overlap = dev_seqs & holdout_seqs
             seq_leak_count = len(overlap)
             disjoint_valid = (seq_leak_count == 0)
 
+        locked = False
+        try:
+            locked = self.is_locked()
+        except DataValidationError:
+            locked = False
+
+        is_valid = bool(sha_valid and count_valid and disjoint_valid and dev_sha_valid)
+        err_msg = None
+        if not sha_valid:
+            err_msg = f"Holdout SHA-256 mismatch: expected {expected_holdout_sha}, got {holdout_sha}"
+        elif not count_valid:
+            err_msg = f"Holdout count mismatch: expected 240, got {len(holdout_records)}"
+        elif not disjoint_valid:
+            err_msg = f"Holdout sequence leakage detected with dev cohort: {seq_leak_count} overlap"
+        elif not dev_sha_valid:
+            err_msg = "Development cohort SHA-256 mismatch against manifest"
+
         return {
-            "is_valid": bool(sha_valid and count_valid and disjoint_valid),
+            "is_valid": is_valid,
+            "error": err_msg,
             "sha_match": sha_valid,
+            "dev_sha_match": dev_sha_valid,
             "sample_count": len(holdout_records),
             "expected_sample_count": 240,
             "sequence_leakage_with_dev": seq_leak_count,
-            "is_locked": self.is_locked(),
+            "is_locked": locked,
         }
 
     def unseal(self, token: str, reason: str) -> List[DNASample]:
@@ -311,6 +365,10 @@ class SealedVault:
         if not reason or len(reason.strip()) < 10:
             raise ValueError("A valid justification reason (at least 10 characters) is required to unseal the vault.")
 
+        audit = self.verify_integrity()
+        if not audit["is_valid"]:
+            raise DataValidationError(f"Cannot unseal vault: integrity check failed: {audit.get('error')}")
+
         with open(self.vault_data_path, "r", encoding="utf-8") as f:
             raw_records = json.load(f)
 
@@ -325,7 +383,7 @@ class SealedVault:
             )
             samples.append(s)
 
-        # Update state file
+        # Update state file atomically
         new_state = {
             "status": "UNSEALED",
             "unsealed": True,
@@ -334,8 +392,10 @@ class SealedVault:
             "unseal_token": token,
             "unseal_reason": reason.strip(),
         }
-        with open(self.state_path, "w", encoding="utf-8") as f:
+        temp_state_path = self.state_path.with_suffix(".tmp")
+        with open(temp_state_path, "w", encoding="utf-8") as f:
             json.dump(new_state, f, indent=2)
+        os.replace(temp_state_path, self.state_path)
 
         logger.warning(
             "SEALED VAULT UNSEALED: reason='%s', token='%s', sample_count=%d",

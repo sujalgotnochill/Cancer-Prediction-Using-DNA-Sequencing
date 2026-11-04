@@ -186,8 +186,38 @@ This roadmap outlines the systematic evolution of the project from the initial s
 
 ---
 
+## Phase 4.5: Sealed Test Vault Security & Evaluation Boundary Audit (Completed)
+- [x] Forensic inspection of vault implementation:
+  - Verified plaintext nature of sequences and labels (unencrypted JSON).
+  - Confirmed OS-level environment reality: local Windows workspace runs under single user privilege without kernel MAC or cryptographic hardware isolation.
+  - Documented vault as a robust **procedural software isolation safeguard**, not an OS/cryptographic security boundary.
+- [x] Ingestion security boundaries:
+  - Implemented `validate_not_sealed_vault_path` across `load_samples`, `load_csv`, `load_json`, and `load_jsonl`.
+  - Ordinary data ingestion attempts on holdout paths are strictly blocked with `PermissionError`.
+- [x] Development cohort isolation:
+  - Created `src/dna_cancer/data/development.py` (`load_development_cohort`, `load_development_dataframe`, `get_development_cv_folds`).
+  - Enforced SHA-256 integrity verification against manifest and zero silent fallback.
+- [x] Dedicated final evaluation entry point:
+  - Implemented `FinalHoldoutEvaluator` in `src/dna_cancer/evaluation/final_evaluator.py`.
+  - Requires explicit frozen model configuration (`is_frozen: True`).
+  - Verifies Development Cohort and Sealed Holdout SHA-256 checksums before unsealing.
+  - Records evaluation events in append-only audit ledger (`artifacts/vault/evaluation_events.jsonl`).
+  - Enforces strict one-shot evaluation, rejecting subsequent calls with `PermissionError`.
+- [x] Tamper-evident state enhancements in `SealedVault`:
+  - `is_locked()` and `verify_integrity()` detect missing/deleted state files as tampering (`DataValidationError`).
+  - Atomic state writes via `os.replace` prevent partial write vulnerabilities.
+- [x] Automated security test suite:
+  - Implemented 9 dedicated tests in `tests/test_vault_security.py` verifying all failure modes, fallback blocks, and boundaries without unsealing production vault.
+  - Full test suite passed (137 tests passing).
+- [x] Author audit deliverables:
+  - `docs/vault_security_audit.md`
+  - `artifacts/vault/vault_security_audit.json`
+
+---
+
 ## Phase 5: Sealed Cross-Validation & Model Optimization (Next)
 - [ ] Implement training and feature pipelines strictly isolated to Tier 1 Development Cohort (`data/processed/development_cohort.csv`, $N=960$):
+  - Access exclusively via `dna_cancer.data.development.load_development_cohort()`.
   - Confirm Tier 2 Sealed Test Vault remains locked (`is_locked: True`).
 - [ ] Implement Group-Balanced 3-Fold Cross-Validation on Development Set:
   - Report fold-by-fold validation performance (tracking `SNRPN` sensitivity on Fold 0).
@@ -200,7 +230,7 @@ This roadmap outlines the systematic evolution of the project from the initial s
   - Multi-Layer Perceptrons (MLP) with dropout and batch normalization.
   - 1D Convolutional Neural Networks (1D-CNN) for sequence motif detection.
 - [ ] Final One-Shot Evaluation on Sealed Test Vault:
-  - Unseal test set strictly once (`vault.unseal(token="PHASE_5_FINAL_UNSEAL")`) for the single winning architecture.
+  - Call `FinalHoldoutEvaluator.evaluate_frozen_model()` strictly once with frozen configuration (`is_frozen: True`) and authorization token `PHASE_5_FINAL_UNSEAL`.
   - Report unbiased generalization performance with 95% Wilson Score CIs for accuracy/recalls and 1,000-iteration Bootstrap CI for Macro F1.
 
 ---
