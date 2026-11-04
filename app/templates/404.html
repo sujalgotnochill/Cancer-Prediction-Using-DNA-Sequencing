@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+
+{% block title %}{{ error_title|default("404 — Page Not Found") }}{% endblock %}
+
+{% block content %}
+<div style="text-align: center; padding: 4rem 1rem; max-width: 600px; margin: 0 auto;">
+  <div style="display: inline-flex; align-items: center; justify-content: center; width: 72px; height: 72px; border-radius: 50%; background: rgba(244, 63, 94, 0.1); border: 1px solid rgba(244, 63, 94, 0.3); color: var(--accent-rose); margin-bottom: 1.5rem;">
+    <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="10"></circle>
+      <line x1="12" y1="8" x2="12" y2="12"></line>
+      <line x1="12" y1="16" x2="12.01" y2="16"></line>
+    </svg>
+  </div>
+
+  <h1 style="font-size: 2rem; font-weight: 800; color: #fff; margin-bottom: 0.75rem;">
+    {{ error_title|default("404 — Page Not Found") }}
+  </h1>
+
+  <p style="color: var(--text-muted); font-size: 1rem; line-height: 1.6; margin-bottom: 2rem;">
+    {{ error_message|default("The requested dashboard resource or endpoint could not be found.") }}
+  </p>
+
+  <div style="display: flex; justify-content: center; gap: 1rem;">
+    <a href="{{ url_for('main.index') }}" class="btn btn-primary">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="15 18 9 12 15 6"></polyline>
+      </svg>
+      Return to Dashboard
+    </a>
+  </div>
+</div>
+{% endblock %}
+

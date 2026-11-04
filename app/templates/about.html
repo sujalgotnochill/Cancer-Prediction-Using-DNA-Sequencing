@@ -1,0 +1,251 @@
+{% extends "base.html" %}
+
+{% block title %}About the Project & Methodology{% endblock %}
+
+{% block content %}
+<div class="hero-section">
+  <div class="hero-pill">
+    <span class="hero-pill-dot"></span>
+    Scientific Methodology &bull; Provenance &bull; Benchmarks
+  </div>
+  <h1 class="hero-title">About the DNA Sequence Classifier</h1>
+  <p class="hero-subtitle">
+    Architectural specification, algorithmic foundations, biological provenance disclosures,
+    and verified evaluation benchmarks of the frozen Phase 5 classification pipeline.
+  </p>
+</div>
+
+<!-- Project Overview -->
+<section class="card about-section">
+  <div class="card-header">
+    <h2 class="card-title">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"></circle>
+        <line x1="12" y1="16" x2="12" y2="12"></line>
+        <line x1="12" y1="8" x2="12.01" y2="8"></line>
+      </svg>
+      1. Project Overview & Scope
+    </h2>
+  </div>
+  <div class="card-body">
+    <p class="about-text">
+      This web application serves as an educational demonstration and inspection tool for a computational genomics classification model developed across five engineering phases.
+      The project began from a legacy machine learning codebase that originally claimed to classify cancer types (Cervical, Colorectal, Endometrial, and Liver) directly from short DNA sequences.
+    </p>
+    <p class="about-text">
+      Rigorous forensic audits conducted during Phase 1 uncovered significant architectural defects in the legacy system: arbitrary train-test splits, data leakage, and deep biological provenance limitations in the underlying public benchmark dataset.
+      The project was subsequently re-architected with reproducible preprocessing, group-aware cross-validation, cryptographic artifact versioning, and strict vault lockdown.
+    </p>
+  </div>
+</section>
+
+<!-- Mandatory Biological Provenance Disclosure -->
+<section class="card about-section">
+  <div class="card-header">
+    <h2 class="card-title">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+        <line x1="12" y1="9" x2="12" y2="13"/>
+        <line x1="12" y1="17" x2="12.01" y2="17"/>
+      </svg>
+      2. Biological Provenance & Dataset Limitations
+    </h2>
+    <span class="badge-tag" style="background: rgba(245, 158, 11, 0.15); border-color: rgba(245, 158, 11, 0.4); color: #f59e0b;">
+      Mandatory Disclosure
+    </span>
+  </div>
+  <div class="card-body">
+    <div class="callout-box warning">
+      <h3 style="color: #fde68a; font-size: 1rem; margin-bottom: 0.5rem; font-weight: 700;">
+        Crucial Scientific Reality: Not Clinically Validated
+      </h3>
+      <p style="color: #fef3c7; font-size: 0.92rem; line-height: 1.6;">
+        Forensic sequence alignment and NCBI BLAST audits demonstrated that the historical training dataset does <em>not</em> represent real human tumor biopsied transcriptomes:
+      </p>
+      <ul style="margin: 0.75rem 0 0.75rem 1.5rem; color: #fde68a; font-size: 0.9rem; line-height: 1.6;">
+        <li><strong>Cervical Cancer sequences</strong> are actually human transcripts mapped to human chromosome 15.</li>
+        <li><strong>Colorectal, Endometrial, and Liver sequences</strong> are bacterial genomic sequences derived from common microbial genomes.</li>
+      </ul>
+      <p style="color: #fef3c7; font-size: 0.92rem; line-height: 1.6; margin-top: 0.5rem;">
+        Therefore, this model differentiates between human chromosomal transcript patterns and bacterial genome motifs, labeled historically under cancer designations.
+        <strong>This application must never be interpreted as performing cancer diagnosis, cancer detection, or patient risk assessment.</strong>
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- Model Architecture & Feature Engineering -->
+<section class="card about-section">
+  <div class="card-header">
+    <h2 class="card-title">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect>
+        <rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect>
+        <line x1="6" y1="6" x2="6.01" y2="6"></line>
+        <line x1="6" y1="18" x2="6.01" y2="18"></line>
+      </svg>
+      3. Machine Learning Architecture
+    </h2>
+  </div>
+  <div class="card-body">
+    <h3 style="color: var(--accent-cyan); font-size: 1.05rem; margin-bottom: 0.5rem; font-weight: 700;">
+      A. k-mer Tokenization (k = 4)
+    </h3>
+    <p class="about-text">
+      DNA nucleotide sequences are decomposed into overlapping substrings of fixed length <code>k=4</code> using a stride of 1.
+      With an alphabet of four canonical bases (A, C, G, T), the complete vocabulary space consists of \(4^4 = 256\) possible 4-mer tokens (e.g., <code>AAAA</code>, <code>AAAC</code>, ..., <code>TTTT</code>).
+      During Phase 5 hyperparameter exploration, 4-mers provided the optimal balance between sequence context representation, computational efficiency, and robust generalization across non-overlapping gene families.
+    </p>
+
+    <h3 style="color: var(--accent-cyan); font-size: 1.05rem; margin-top: 1.25rem; margin-bottom: 0.5rem; font-weight: 700;">
+      B. TF-IDF Frequency Representation
+    </h3>
+    <p class="about-text">
+      Term Frequency &ndash; Inverse Document Frequency (TF-IDF) is computed across the 256 4-mer vocabulary.
+      Unlike raw k-mer counts, TF-IDF scales down ubiquitous background k-mers while accentuating distinct sub-sequences characteristic of individual source categories.
+      Standard non-canonical representation was empirically verified to preserve strand-asymmetric biological motifs.
+    </p>
+
+    <h3 style="color: var(--accent-cyan); font-size: 1.05rem; margin-top: 1.25rem; margin-bottom: 0.5rem; font-weight: 700;">
+      C. Linear Support Vector Classifier (LinearSVC)
+    </h3>
+    <p class="about-text">
+      The classifier utilizes a linear Support Vector Machine with coordinate descent optimization and squared hinge loss (\(C = 1.0\), max iterations 2,000).
+      Linear hyperplanes separate the high-dimensional TF-IDF vectors in \(\mathbb{R}^{256}\).
+    </p>
+    <div class="callout-box">
+      <h4 style="color: var(--accent-cyan); font-size: 0.92rem; font-weight: 700; margin-bottom: 0.35rem;">
+        Decision Scores vs. Probabilities
+      </h4>
+      <p style="font-size: 0.88rem; color: var(--text-muted); line-height: 1.55;">
+        LinearSVC optimizes the margin between classes without producing calibrated posterior probabilities.
+        Scores reported by this application are raw, signed perpendicular distances from the decision hyperplanes:
+        \(f_k(x) = w_k^T x + b_k\). Positive values indicate membership on the positive side of the margin for class \(k\).
+        These raw scores are intentionally not disguised as percentages or confidence metrics.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- Final Verified Holdout Evaluation -->
+<section class="card about-section">
+  <div class="card-header">
+    <h2 class="card-title">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path>
+      </svg>
+      4. Final Verified Holdout Evaluation
+    </h2>
+    <span class="badge-tag">Single One-Shot Evaluation</span>
+  </div>
+  <div class="card-body">
+    <p class="about-text">
+      Following Phase 5 hyperparameter optimization on the 960 development samples, the model was frozen and evaluated <em>exactly once</em> on the sealed Tier 2 Holdout dataset (N=240, 60 samples per class).
+      The holdout vault was sealed with SHA-256 integrity verification to eliminate snooping or leakage.
+    </p>
+
+    <table class="benchmark-table">
+      <thead>
+        <tr>
+          <th>Evaluation Metric</th>
+          <th>Development CV (3-Fold)</th>
+          <th>Final Holdout Result (N=240)</th>
+          <th>95% Confidence Interval</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Overall Accuracy</strong></td>
+          <td>96.74% &plusmn; 0.73%</td>
+          <td style="color: var(--accent-cyan); font-weight: 700;">91.25% (219 / 240)</td>
+          <td>[87.0%, 94.2%]</td>
+        </tr>
+        <tr>
+          <td><strong>Macro F1 Score</strong></td>
+          <td>0.9671 &plusmn; 0.0063</td>
+          <td style="color: var(--accent-cyan); font-weight: 700;">0.9105</td>
+          <td>&mdash;</td>
+        </tr>
+        <tr>
+          <td><strong>Macro Precision</strong></td>
+          <td>96.80%</td>
+          <td>91.45%</td>
+          <td>&mdash;</td>
+        </tr>
+        <tr>
+          <td><strong>Macro Recall</strong></td>
+          <td>96.74%</td>
+          <td>91.25%</td>
+          <td>&mdash;</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3 style="color: var(--text-main); font-size: 1rem; margin-top: 1.5rem; margin-bottom: 0.5rem; font-weight: 700;">
+      Per-Class Holdout Performance & Error Breakdown
+    </h3>
+    <table class="benchmark-table">
+      <thead>
+        <tr>
+          <th>Historical Label</th>
+          <th>Support</th>
+          <th>Correct</th>
+          <th>Errors</th>
+          <th>Recall</th>
+          <th>Precision</th>
+          <th>F1-Score</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Cervical Cancer</strong></td>
+          <td>60</td>
+          <td>46</td>
+          <td style="color: var(--accent-rose); font-weight: 600;">14</td>
+          <td>76.67%</td>
+          <td>93.88%</td>
+          <td>0.8440</td>
+        </tr>
+        <tr>
+          <td><strong>Colorectal Cancer</strong></td>
+          <td>60</td>
+          <td>54</td>
+          <td>6</td>
+          <td>90.00%</td>
+          <td>87.10%</td>
+          <td>0.8852</td>
+        </tr>
+        <tr>
+          <td><strong>Endometrial Cancer</strong></td>
+          <td>60</td>
+          <td>59</td>
+          <td>1</td>
+          <td>98.33%</td>
+          <td>88.06%</td>
+          <td>0.9291</td>
+        </tr>
+        <tr>
+          <td><strong>Liver Cancer</strong></td>
+          <td>60</td>
+          <td>60</td>
+          <td style="color: var(--accent-green); font-weight: 600;">0</td>
+          <td>100.00%</td>
+          <td>96.77%</td>
+          <td>0.9836</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout-box" style="margin-top: 1.5rem;">
+      <h4 style="color: var(--accent-cyan); font-size: 0.92rem; font-weight: 700; margin-bottom: 0.35rem;">
+        Scientific Observation: Cross-Validation vs. Holdout Discrepancy
+      </h4>
+      <p style="font-size: 0.88rem; color: var(--text-muted); line-height: 1.55;">
+        As rigorously documented in the Phase 5 and 6 reports, the development cross-validation score (96.71% Macro F1) was notably higher than the final holdout score (91.05% Macro F1).
+        The primary discrepancy originated from <strong>weaker Cervical recall (76.67%, 14 misclassifications)</strong> on the holdout cohort, demonstrating the generalization gap between the 23 development gene families and previously unseen sequences.
+      </p>
+    </div>
+  </div>
+</section>
+{% endblock %}
+

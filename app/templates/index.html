@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+
+{% block title %}DNA Sequence Classification{% endblock %}
+
+{% block content %}
+<div class="hero-section">
+  <div class="hero-pill">
+    <span class="hero-pill-dot"></span>
+    Computational Genomics &bull; Supervised Inference
+  </div>
+  <h1 class="hero-title">DNA Sequence Classification</h1>
+  <p class="hero-subtitle">
+    Evaluate raw nucleotide sequences against the frozen Phase 5 Linear Support Vector Classifier (k=4, TF-IDF).
+    This system maps input k-mer frequency representations to historical dataset source categories.
+  </p>
+</div>
+
+<div class="dashboard-grid">
+  <!-- Primary Input Section -->
+  <section class="card" aria-labelledby="sequence-input-title">
+    <div class="card-header">
+      <h2 id="sequence-input-title" class="card-title">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="4 7 4 4 20 4 20 7"></polyline>
+          <line x1="9" y1="20" x2="15" y2="20"></line>
+          <line x1="12" y1="4" x2="12" y2="20"></line>
+        </svg>
+        Sequence Ingest & Inference
+      </h2>
+      <span class="badge-tag">Max 50,000 bp</span>
+    </div>
+
+    <div class="card-body">
+      <form id="predict-form" action="{{ url_for('main.predict') }}" method="POST" enctype="multipart/form-data">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+        <div class="input-label-row">
+          <label for="sequence_text" class="input-label">DNA Nucleotide Sequence / Single FASTA Record</label>
+          <span id="char-counter" class="char-counter">0 / 50,000 bp</span>
+        </div>
+
+        <textarea
+          id="sequence_text"
+          name="sequence_text"
+          class="sequence-textarea"
+          placeholder="Paste raw nucleotide sequence (e.g. ATGC...) or a single FASTA record (e.g. >header\nATGC...)"
+          spellcheck="false"
+          autocomplete="off"
+        ></textarea>
+
+        <div id="live-validation" class="live-validation-box"></div>
+
+        <!-- Drag & Drop / File Upload Area -->
+        <div id="file-upload-zone" class="file-upload-zone">
+          <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+          <div class="upload-text">
+            Drag and drop a FASTA or text file here, or <span class="upload-text-browse">browse files</span>
+          </div>
+          <div class="upload-subtext">Supported formats: .fasta, .fa, .fna, .txt (up to 5 MB)</div>
+
+          <input
+            type="file"
+            id="sequence_file"
+            name="sequence_file"
+            class="hidden-file-input"
+            accept=".txt,.fasta,.fa,.fna"
+          >
+
+          <div id="selected-file-badge" class="selected-file-badge" style="display: none;">
+            <span id="selected-file-name"></span>
+            <button type="button" id="clear-file-btn" class="clear-file-btn" title="Remove file">&times;</button>
+          </div>
+        </div>
+
+        <div class="form-actions">
+          <div class="button-group">
+            <button type="submit" id="btn-submit-predict" class="btn btn-primary">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="5 3 19 12 5 21 5 3"></polygon>
+              </svg>
+              <span>Classify Sequence</span>
+            </button>
+            <button type="button" id="btn-sample-sequence" class="btn btn-secondary" title="Load synthetic non-clinical demonstration sequence">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+                <line x1="16" y1="13" x2="8" y2="13"></line>
+                <line x1="16" y1="17" x2="8" y2="17"></line>
+                <polyline points="10 9 9 9 8 9"></polyline>
+              </svg>
+              <span>Load Demo Sequence</span>
+            </button>
+          </div>
+
+          <div class="button-group">
+            <button type="button" id="btn-clear-input" class="btn btn-outline">
+              Clear Input
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <!-- Sidebar: Model & System Specifications -->
+  <aside class="sidebar-section">
+    <div class="card" style="margin-bottom: 1.5rem;">
+      <div class="card-header">
+        <h3 class="card-title">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          </svg>
+          Phase 5 Model Specs
+        </h3>
+      </div>
+      <div class="card-body">
+        <ul class="spec-list">
+          <li class="spec-item">
+            <span class="spec-key">Architecture</span>
+            <span class="spec-val accent">LinearSVC</span>
+          </li>
+          <li class="spec-item">
+            <span class="spec-key">Feature k-mer Size</span>
+            <span class="spec-val">k = 4 (4-mers)</span>
+          </li>
+          <li class="spec-item">
+            <span class="spec-key">Feature Dimension</span>
+            <span class="spec-val">256 Vocabulary Tokens</span>
+          </li>
+          <li class="spec-item">
+            <span class="spec-key">Weighting Scheme</span>
+            <span class="spec-val">TF-IDF (Standard)</span>
+          </li>
+          <li class="spec-item">
+            <span class="spec-key">Holdout Accuracy</span>
+            <span class="spec-val accent">91.25% (219/240)</span>
+          </li>
+          <li class="spec-item">
+            <span class="spec-key">Holdout Macro F1</span>
+            <span class="spec-val">0.9105</span>
+          </li>
+          <li class="spec-item">
+            <span class="spec-key">Model Status</span>
+            <span class="spec-val"><span class="badge-tag">Frozen Artifact</span></span>
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h3 class="card-title">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="16" x2="12" y2="12"></line>
+            <line x1="12" y1="8" x2="12.01" y2="8"></line>
+          </svg>
+          Dataset Provenance Notice
+        </h3>
+      </div>
+      <div class="card-body">
+        <p style="font-size: 0.84rem; color: var(--text-muted); line-height: 1.55;">
+          The classes evaluated by this model represent historical training labels (Cervical, Colorectal, Endometrial, Liver).
+          Known biological provenance analysis revealed human transcripts for Cervical and bacterial genomic sequences for the other three classes.
+          Inference demonstrates sequence-source classification only.
+        </p>
+      </div>
+    </div>
+  </aside>
+</div>
+{% endblock %}
+

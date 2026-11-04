@@ -203,6 +203,17 @@ class FeatureBuilder:
             raise FeatureExtractionError(f"Vectorizer file not found: {v_path}")
 
         self.vectorizer = joblib.load(v_path)
+        if hasattr(self.vectorizer, "vocabulary_") and self.vectorizer.vocabulary_:
+            sample_token = next(iter(self.vectorizer.vocabulary_.keys()))
+            if sample_token and len(sample_token) > 0:
+                self.k = len(sample_token)
+                self.kmer_extractor = KMerExtractor(
+                    k=self.k,
+                    stride=self.stride,
+                    to_lower=True,
+                    as_sentence=True,
+                    canonical=self.canonical,
+                )
         if encoder_path:
             e_path = Path(encoder_path)
             if e_path.exists():

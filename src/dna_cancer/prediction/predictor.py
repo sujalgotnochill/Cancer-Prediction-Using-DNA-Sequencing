@@ -37,10 +37,30 @@ class DNAPredictor:
         model_path: Union[str, Path],
         vectorizer_path: Union[str, Path],
         encoder_path: Optional[Union[str, Path]] = None,
+        k: Optional[int] = None,
+        canonical: Optional[bool] = None,
     ) -> "DNAPredictor":
         """Factory method to instantiate a predictor from saved artifact files."""
         model = ModelFactory.load(model_name, model_path)
-        feature_builder = FeatureBuilder()
+
+        # Inspect sibling model_config.json if available to infer k and canonical representations
+        config_path = Path(model_path).parent / "model_config.json"
+        if config_path.exists():
+            try:
+                import json
+                with open(config_path, "r", encoding="utf-8") as f:
+                    cfg_data = json.load(f)
+                feat_cfg = cfg_data.get("feature_configuration", {})
+                if k is None and "k" in feat_cfg:
+                    k = int(feat_cfg["k"])
+                if canonical is None and "canonical" in feat_cfg:
+                    canonical = bool(feat_cfg["canonical"])
+            except Exception:
+                pass
+
+        init_k = k if k is not None else 6
+        init_canonical = canonical if canonical is not None else False
+        feature_builder = FeatureBuilder(k=init_k, canonical=init_canonical)
         feature_builder.load(vectorizer_path, encoder_path)
         return cls(model=model, feature_builder=feature_builder)
 
@@ -84,6 +104,25 @@ class DNAPredictor:
         except Exception:
             pass
 
+        decision_scores: Optional[Dict[str, float]] = None
+        if hasattr(self.model, "decision_function"):
+            try:
+                df_out = self.model.decision_function(features)
+                if hasattr(df_out, "ndim") and df_out.ndim == 2:
+                    raw_scores = df_out[0]
+                elif hasattr(df_out, "ndim") and df_out.ndim == 1:
+                    raw_scores = df_out
+                else:
+                    raw_scores = df_out[0] if isinstance(df_out, (list, tuple)) else df_out
+
+                classes = getattr(self.feature_builder.label_encoder, "classes_", None)
+                if classes is not None and len(classes) == len(raw_scores):
+                    decision_scores = {str(c): float(s) for c, s in zip(classes, raw_scores)}
+                else:
+                    decision_scores = {f"class_{i}": float(s) for i, s in enumerate(raw_scores)}
+            except Exception:
+                decision_scores = None
+
         predicted_class: str
         if hasattr(self.feature_builder.label_encoder, "classes_"):
             predicted_class = self.feature_builder.inverse_transform_labels([pred_idx])[0]
@@ -95,6 +134,7 @@ class DNAPredictor:
             "class_index": pred_idx,
             "confidence": confidence,
             "probabilities": proba,
+            "decision_scores": decision_scores,
             "sequence_length": len(cleaned),
         }
 

@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}DNA Sequence Classifier{% endblock %} — Scientific Dashboard</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+  <!-- Navigation Header -->
+  <header class="navbar">
+    <div class="nav-container">
+      <a href="{{ url_for('main.index') }}" class="nav-brand">
+        <!-- Double Helix Biotechnology SVG Icon -->
+        <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M2 15c6.667-6 13.333 0 20-6"/>
+          <path d="M9 22c1.798-1.998 2.518-3.995 2.807-5.993"/>
+          <path d="M15 2c-1.798 1.998-2.518 3.995-2.807 5.993"/>
+          <path d="M17 6l-2.5-2.5"/>
+          <path d="M14 8l-1-1"/>
+          <path d="M7 18l2.5 2.5"/>
+          <path d="M3.5 14.5l.5.5"/>
+          <path d="M20 9.5l.5.5"/>
+          <path d="M2 9c6.667 6 13.333 0 20 6"/>
+          <path d="M7 6l-2.5-2.5"/>
+          <path d="M17 18l2.5 2.5"/>
+        </svg>
+        <span class="brand-title">DNA Sequence Classifier</span>
+        <span class="brand-badge">Frozen Phase 5 Candidate</span>
+      </a>
+
+      <nav>
+        <ul class="nav-links">
+          <li>
+            <a href="{{ url_for('main.index') }}" class="nav-link {% if request.endpoint == 'main.index' %}active{% endif %}">
+              Home
+            </a>
+          </li>
+          <li>
+            <a href="{{ url_for('main.history') }}" class="nav-link {% if request.endpoint == 'main.history' %}active{% endif %}">
+              Prediction History
+            </a>
+          </li>
+          <li>
+            <a href="{{ url_for('main.about') }}" class="nav-link {% if request.endpoint == 'main.about' %}active{% endif %}">
+              About
+            </a>
+          </li>
+        </ul>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Universal Scientific Disclosure Banner -->
+  <aside class="scientific-banner" role="alert" aria-label="Mandatory scientific disclosure">
+    <div class="banner-container">
+      <svg class="banner-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+        <line x1="12" y1="9" x2="12" y2="13"/>
+        <line x1="12" y1="17" x2="12.01" y2="17"/>
+      </svg>
+      <div class="banner-text">
+        <span class="banner-strong">Mandatory Educational Disclosure:</span>
+        This is an educational DNA sequence-source classification project. Its training dataset has known biological provenance limitations and is not clinically validated. Predictions must not be interpreted as cancer diagnoses or medical advice.
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main Content Wrapper -->
+  <main class="main-wrapper">
+    <!-- Flash Notifications -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="flash-container">
+          {% for category, message in messages %}
+            <div class="flash-alert flash-{{ category }}">
+              <span>{{ message }}</span>
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    {% block content %}{% endblock %}
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="footer-container">
+      <div class="footer-disclosure">
+        <p><strong>Scientific & Biological Provenance Limitation:</strong> The historical benchmark dataset evaluated in this project contains human chromosome 15 transcripts labeled Cervical and bacterial genomic sequences labeled Colorectal, Endometrial, and Liver. Consequently, this application operates strictly as an educational sequence-source classifier. It does not detect clinical malignancies, diagnose patients, identify tumors, or guide clinical treatment.</p>
+      </div>
+      <div class="footer-bottom">
+        <div>
+          <span>Model Architecture: <strong>LinearSVC</strong> (k=4, TF-IDF standard representation, 256 features)</span> &bull;
+          <span>Single Holdout Accuracy: <strong>91.25%</strong> (Macro F1: 0.9105)</span>
+        </div>
+        <div>
+          <span>Local Research Environment &bull; Python & Flask</span>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
+

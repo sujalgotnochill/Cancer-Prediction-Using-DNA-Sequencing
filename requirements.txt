@@ -13,5 +13,6 @@ pytest>=7.0.0
 # Optional dependencies (uncomment as needed for deep learning / FASTA ingest / web app)
 # tensorflow>=2.10.0
 # biopython>=1.79
-# flask>=2.0.0
+# Web application serving layer
+flask>=2.0.0
 

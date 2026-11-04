@@ -94,6 +94,11 @@ artifacts/evaluation/*
 !artifacts/evaluation/.gitkeep
 artifacts/datasets/*
 !artifacts/datasets/.gitkeep
+artifacts/history/*
+!artifacts/history/.gitkeep
+*.db
+*.sqlite
+*.sqlite3
 
 # Raw archive formats
 *.zip

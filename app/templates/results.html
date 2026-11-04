@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+
+{% block title %}Classification Results{% endblock %}
+
+{% block content %}
+<!-- Top Result Hero Banner -->
+<div class="result-hero-card">
+  <span class="result-label-badge">Model Predicted Category &bull; Historical Label</span>
+  <h1 class="result-class-name">{{ result.predicted_class }}</h1>
+
+  {% if result.header %}
+    <div style="font-family: var(--font-mono); font-size: 0.88rem; color: var(--accent-cyan); margin-bottom: 0.5rem;">
+      Record Header: &gt;{{ result.header }}
+    </div>
+  {% elif source_filename %}
+    <div style="font-family: var(--font-mono); font-size: 0.88rem; color: var(--accent-cyan); margin-bottom: 0.5rem;">
+      Source File: {{ source_filename }}
+    </div>
+  {% endif %}
+
+  <div class="result-disclaimer-card">
+    <strong>Mandatory Scientific Notice:</strong>
+    This output denotes sequence similarity to the historical training dataset source category.
+    It does <em>not</em> represent a cancer detection, tumor diagnosis, or patient risk assessment.
+    Biological provenance analysis indicates this model discriminates between human chromosome 15 transcripts (Cervical) and bacterial genomic sequences (Colorectal, Endometrial, Liver).
+  </div>
+</div>
+
+<!-- Primary Metric Stat Cards -->
+<div class="metrics-grid">
+  <div class="metric-card">
+    <div class="metric-header">Sequence Length</div>
+    <div class="metric-value">{{ "{:,}".format(result.sequence_length) }}<span class="metric-unit">bp</span></div>
+  </div>
+
+  <div class="metric-card">
+    <div class="metric-header">GC Content</div>
+    <div class="metric-value">{{ "%.2f"|format(result.gc_content) }}<span class="metric-unit">%</span></div>
+  </div>
+
+  <div class="metric-card">
+    <div class="metric-header">4-mer Substrings</div>
+    <div class="metric-value">{{ "{:,}".format(result.kmer_count) }}<span class="metric-unit">tokens</span></div>
+  </div>
+
+  <div class="metric-card">
+    <div class="metric-header">Top Decision Score</div>
+    {% set top_score = result.decision_scores.get(result.predicted_class) %}
+    <div class="metric-value">
+      {% if top_score is not none %}
+        {{ "%.3f"|format(top_score) }}
+      {% else %}
+        N/A
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- Nucleotide Composition Section -->
+<section class="card" style="margin-bottom: 2rem;">
+  <div class="card-header">
+    <h2 class="card-title">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="18" y1="20" x2="18" y2="10"></line>
+        <line x1="12" y1="20" x2="12" y2="4"></line>
+        <line x1="6" y1="20" x2="6" y2="14"></line>
+      </svg>
+      Nucleotide Base Composition & Frequencies
+    </h2>
+    <span class="badge-tag">A, C, G, T, N Breakdown</span>
+  </div>
+
+  <div class="card-body">
+    <!-- Visual Stacked Bar -->
+    <div class="composition-stacked-bar">
+      {% for base, info in result.base_frequencies.items() %}
+        {% if info.percentage > 0 %}
+          <div
+            class="bar-segment bar-{{ base|lower }}"
+            style="width: {{ info.percentage }}%;"
+            title="{{ base }}: {{ info.percentage }}% ({{ info.count }} bp)"
+          ></div>
+        {% endif %}
+      {% endfor %}
+    </div>
+
+    <!-- Legend with Counts and Percentages -->
+    <div class="composition-legend">
+      {% for base, info in result.base_frequencies.items() %}
+        <div class="legend-item">
+          <span class="legend-swatch bar-{{ base|lower }}"></span>
+          <span><strong>{{ base }}:</strong> {{ "%.2f"|format(info.percentage) }}% ({{ "{:,}".format(info.count) }} bp)</span>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<!-- Raw Decision Scores Section -->
+<section class="card scores-card">
+  <div class="card-header">
+    <h2 class="card-title">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"></circle>
+        <polyline points="12 6 12 12 16 14"></polyline>
+      </svg>
+      Raw Decision Hyperplane Scores
+    </h2>
+    <span class="badge-tag">Uncalibrated LinearSVC Distances</span>
+  </div>
+
+  <div class="card-body">
+    <div class="scores-explainer">
+      <p><strong>Scientific Disclosure Regarding Model Scores:</strong> LinearSVC produces unbounded signed real-valued distances to the classification separating hyperplanes, <em>not</em> calibrated probabilities or clinical confidence percentages. Higher positive scores indicate stronger alignment with the hyperplane corresponding to that historical label.</p>
+    </div>
+
+    {% if result.decision_scores %}
+      {# Find minimum and maximum score to compute proportional bar width #}
+      {% set scores = result.decision_scores.values()|list %}
+      {% set min_score = scores|min %}
+      {% set max_score = scores|max %}
+      {% set score_range = (max_score - min_score) if (max_score - min_score) > 0.001 else 1.0 %}
+
+      {% for cls_name, score in result.decision_scores.items() %}
+        {% set is_winner = (cls_name == result.predicted_class) %}
+        {% set bar_pct = [((score - min_score) / score_range * 100), 5]|max %}
+        <div class="score-row {% if is_winner %}winner{% endif %}">
+          <div class="score-meta">
+            <span class="score-class-name">
+              {{ cls_name }}
+              {% if is_winner %}
+                <span class="badge-tag" style="background: rgba(16, 185, 129, 0.15); border-color: rgba(16, 185, 129, 0.4); color: #10b981;">
+                  Highest Score
+                </span>
+              {% endif %}
+            </span>
+            <span class="score-number">{{ "%+.4f"|format(score) }}</span>
+          </div>
+          <div class="score-bar-track">
+            <div class="score-bar-fill" style="width: {{ bar_pct }}%;"></div>
+          </div>
+        </div>
+      {% endfor %}
+    {% else %}
+      <p style="color: var(--text-dim);">Decision scores are not available for this model configuration.</p>
+    {% endif %}
+  </div>
+</section>
+
+<!-- Sequence Preview Section -->
+<section class="card" style="margin-bottom: 2rem;">
+  <div class="card-header">
+    <h3 class="card-title">Sequence Preview</h3>
+    <span style="font-size: 0.78rem; color: var(--text-dim); font-family: var(--font-mono);">
+      Sanitized Character Representation
+    </span>
+  </div>
+  <div class="card-body">
+    <div class="preview-box">
+      {{ result.sequence_preview }}
+    </div>
+  </div>
+</section>
+
+<!-- Bottom Actions -->
+<div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+  <a href="{{ url_for('main.index') }}" class="btn btn-primary">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="15 18 9 12 15 6"></polyline>
+    </svg>
+    Classify Another Sequence
+  </a>
+  <a href="{{ url_for('main.history') }}" class="btn btn-secondary">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="10"></circle>
+      <polyline points="12 6 12 12 14 14"></polyline>
+    </svg>
+    View Prediction History
+  </a>
+</div>
+{% endblock %}
+

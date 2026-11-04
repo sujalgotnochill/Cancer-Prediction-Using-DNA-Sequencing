@@ -344,6 +344,10 @@ class LinearSVCClassifier(BaseDNAClassifier):
         self._init_estimator()
         return self.model.predict(X)
 
+    def decision_function(self, X: Any) -> Any:
+        self._init_estimator()
+        return self.model.decision_function(X)
+
     def predict_proba(self, X: Any) -> Any:
         self._init_estimator()
         if np is None:

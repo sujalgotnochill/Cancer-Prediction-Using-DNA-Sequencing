@@ -156,6 +156,46 @@ cp .env.example .env
 
 ---
 
+## Run the Web Application Locally
+
+The project includes a complete local scientific dashboard built with Flask, Jinja2, HTML5, CSS3, and Vanilla JavaScript to inspect DNA sequences and perform inference against the frozen Phase 5 LinearSVC model (\(k=4\), TF-IDF).
+
+### Quick Start (Windows PowerShell)
+
+1. **Open PowerShell in the project directory:**
+   ```powershell
+   cd D:\Cancer-Prediction-Using-DNA-Sequencing
+   ```
+
+2. **Ensure dependencies are installed:**
+   ```powershell
+   python -m pip install -r requirements.txt
+   ```
+
+3. **Start the local server:**
+   ```powershell
+   python run.py
+   ```
+
+4. **Access the web application in your browser:**
+   Open:
+   [http://127.0.0.1:5000](http://127.0.0.1:5000)
+
+### Key Web Application Features
+
+- **Interactive Scientific Dashboard:** Dark biotechnology aesthetic with live nucleotide character counter and composition metrics.
+- **Flexible Sequence Ingestion:** Direct sequence textarea, FASTA file upload, and drag-and-drop zone.
+- **Demonstration Sequence:** One-click synthetic non-clinical demo sequence loader.
+- **Frozen Phase 5 Model:** Real-time inference using the frozen LinearSVC candidate (91.25% verified holdout accuracy, 0.9105 Macro F1).
+- **Raw Decision Scores:** Reports true signed distances from decision hyperplanes rather than misrepresenting them as probabilities.
+- **Local Prediction History:** Persistent SQLite history tracking metadata and sequence statistics (raw DNA sequences and patient information are strictly never saved).
+- **Comprehensive Documentation:** Full architectural and usage details in [`docs/local_web_application.md`](docs/local_web_application.md).
+
+> [!WARNING]
+> **Mandatory Scientific Disclosure:** This application performs educational sequence-source classification on a historically labeled benchmark dataset. It does not perform clinical cancer diagnosis, patient risk prediction, or medical advice.
+
+---
+
 ## 6. Running Tests
 
 The test suite runs with zero external dependencies using Python's standard library `unittest` runner, or with `pytest` if installed:
