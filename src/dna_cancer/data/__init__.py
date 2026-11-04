@@ -1,6 +1,12 @@
 """Data ingestion, dataset abstractions, quality validation, profiling, and registry management."""
 
 from dna_cancer.data.dataset import DNADataset
+from dna_cancer.data.fasta_inspector import (
+    FastaFileSummary,
+    format_bytes,
+    inspect_collection,
+    inspect_fasta_file,
+)
 from dna_cancer.data.ingestion import (
     ColumnMapping,
     FastaLabelMapper,
@@ -69,4 +75,9 @@ __all__ = [
     "split_random",
     "split_stratified",
     "split_grouped",
+    # Inspector
+    "FastaFileSummary",
+    "inspect_fasta_file",
+    "inspect_collection",
+    "format_bytes",
 ]
