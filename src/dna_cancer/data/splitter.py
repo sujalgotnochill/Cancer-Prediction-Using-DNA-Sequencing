@@ -487,6 +487,177 @@ def split_gene_family_grouped(
     return train_out, val_out, test_out
 
 
+def split_gene_family_cv_folds(
+    samples: List[DNASample],
+    n_splits: int = 3,
+    seed: int = 42,
+    grouping_mode: str = "within_organism",
+    gene_key: str = "gene",
+) -> List[Tuple[List[DNASample], List[DNASample]]]:
+    """Partition development samples into deterministic group-aware cross-validation folds.
+
+    Guarantees:
+      1. Every development sample appears in the validation partition of exactly one fold.
+      2. No within-organism gene family or exact nucleotide sequence crosses training and validation partitions.
+      3. All class labels are represented in both training and validation splits for every fold.
+      4. Fold assignments are completely deterministic.
+
+    Args:
+        samples: List of DNASample objects (e.g., Development Cohort).
+        n_splits: Number of cross-validation folds (recommended: 3).
+        seed: Random seed for deterministic group shuffling.
+        grouping_mode: 'within_organism' (default), 'cross_organism', or 'exact_sequence'.
+        gene_key: Metadata field for gene family.
+
+    Returns:
+        List of (train_samples, val_samples) tuples for each fold.
+    """
+    if n_splits < 2:
+        raise DataValidationError(f"Cross-validation requires at least 2 folds, got {n_splits}.")
+    if not samples:
+        raise DataValidationError("Cannot generate CV folds on empty sample list.")
+
+    # 1. Assign each sample to an atomic group
+    groups: Dict[str, List[DNASample]] = defaultdict(list)
+    for s in samples:
+        gene = getattr(s.metadata, gene_key, None) or s.metadata.additional_metadata.get(gene_key)
+        norm_seq = s.sequence.strip().upper()
+        seq_hash = hashlib.sha256(norm_seq.encode("utf-8")).hexdigest()
+
+        if grouping_mode == "exact_sequence" or (not gene):
+            grp_id = f"seq_{seq_hash}"
+        elif grouping_mode == "within_organism":
+            org_ctx = s.metadata.organism or s.label or "unspecified"
+            grp_id = f"gene_{org_ctx}_{str(gene).strip()}"
+        elif grouping_mode == "cross_organism":
+            grp_id = f"gene_{str(gene).strip()}"
+        else:
+            raise DataValidationError(f"Unsupported grouping_mode: '{grouping_mode}'.")
+
+        groups[grp_id].append(s)
+
+    # 2. Partition groups per class using greedy bin-packing
+    label_groups: Dict[str, Dict[str, List[DNASample]]] = defaultdict(dict)
+    for gid, glist in groups.items():
+        lbl_counts = defaultdict(int)
+        for s in glist:
+            lbl_counts[s.label or "Unlabeled"] += 1
+        primary_lbl = max(lbl_counts.items(), key=lambda x: x[1])[0]
+        label_groups[primary_lbl][gid] = glist
+
+    rng = random.Random(seed)
+    fold_val_groups: List[Set[str]] = [set() for _ in range(n_splits)]
+    fold_val_samples: List[List[DNASample]] = [[] for _ in range(n_splits)]
+
+    for lbl, gdict in label_groups.items():
+        # Shuffle keys with tie-breaker seed, then sort descending by group size
+        g_items = list(gdict.items())
+        rng.shuffle(g_items)
+        sorted_groups = sorted(g_items, key=lambda x: len(x[1]), reverse=True)
+
+        class_fold_counts = [0] * n_splits
+        for gid, glist in sorted_groups:
+            # Assign to the fold currently having the fewest samples for this class
+            min_idx = class_fold_counts.index(min(class_fold_counts))
+            fold_val_groups[min_idx].add(gid)
+            fold_val_samples[min_idx].extend(glist)
+            class_fold_counts[min_idx] += len(glist)
+
+    # 3. Construct (train, val) pairs and enforce leakage verification
+    cv_folds: List[Tuple[List[DNASample], List[DNASample]]] = []
+    all_val_samples_count = 0
+
+    for f_idx in range(n_splits):
+        val_set = list(fold_val_samples[f_idx])
+        val_grps = fold_val_groups[f_idx]
+        all_val_samples_count += len(val_set)
+
+        train_set: List[DNASample] = []
+        train_grps: Set[str] = set()
+
+        for o_idx in range(n_splits):
+            if o_idx != f_idx:
+                train_set.extend(fold_val_samples[o_idx])
+                train_grps.update(fold_val_groups[o_idx])
+
+        # Assert disjointness
+        assert not (val_grps & train_grps), f"Fold {f_idx}: Group leakage between train and val!"
+        train_seqs = {s.sequence.strip().upper() for s in train_set}
+        val_seqs = {s.sequence.strip().upper() for s in val_set}
+        assert not (train_seqs & val_seqs), f"Fold {f_idx}: Sequence leakage between train and val!"
+
+        # Ensure no empty class in train or val
+        val_classes = {s.label for s in val_set}
+        train_classes = {s.label for s in train_set}
+        if len(val_classes) < len(label_groups):
+            logger.warning("Fold %d validation set is missing classes: %s", f_idx, set(label_groups.keys()) - val_classes)
+
+        rng.shuffle(train_set)
+        rng.shuffle(val_set)
+        cv_folds.append((train_set, val_set))
+
+    assert all_val_samples_count == len(samples), (
+        f"Validation sample assignment mismatch: expected {len(samples)}, got {all_val_samples_count}"
+    )
+
+    logger.info(
+        "Generated %d-fold group-aware CV (mode='%s', total_samples=%d, total_groups=%d)",
+        n_splits, grouping_mode, len(samples), len(groups)
+    )
+
+    return cv_folds
+
+
+def generate_group_shufflesplit_folds(
+    samples: List[DNASample],
+    n_splits: int = 10,
+    val_size: float = 0.20,
+    seed: int = 42,
+    grouping_mode: str = "within_organism",
+    gene_key: str = "gene",
+) -> List[Tuple[List[DNASample], List[DNASample]]]:
+    """Generate repeated group-aware Monte Carlo train/validation splits.
+
+    Note: The repeated iterations are non-independent resamplings from the same population.
+    Results across iterations must be aggregated using median/IQR rather than treated as independent evidence.
+
+    Args:
+        samples: List of DNASample objects.
+        n_splits: Number of repeated splits (e.g. 10).
+        val_size: Proportion of groups for validation (e.g. 0.20).
+        seed: Base random seed for split generation.
+        grouping_mode: 'within_organism', 'cross_organism', or 'exact_sequence'.
+        gene_key: Metadata field for gene family.
+
+    Returns:
+        List of (train_samples, val_samples) tuples for each iteration.
+    """
+    if n_splits < 1:
+        raise DataValidationError(f"n_splits must be at least 1, got {n_splits}.")
+    if not (0.0 < val_size < 1.0):
+        raise DataValidationError(f"val_size must be between 0.0 and 1.0, got {val_size}.")
+
+    folds: List[Tuple[List[DNASample], List[DNASample]]] = []
+    for i in range(n_splits):
+        iter_seed = seed + (i * 37)
+        tr, va, _ = split_gene_family_grouped(
+            samples=samples,
+            train_size=1.0 - val_size,
+            val_size=val_size,
+            test_size=0.0,
+            seed=iter_seed,
+            grouping_mode=grouping_mode,
+            gene_key=gene_key,
+        )
+        folds.append((tr, va))
+
+    logger.info(
+        "Generated %d-iteration group-aware ShuffleSplit (mode='%s', val_size=%.2f, base_seed=%d)",
+        n_splits, grouping_mode, val_size, seed
+    )
+    return folds
+
+
 def verify_gene_family_leakage(
     train: List[DNASample],
     val: List[DNASample],

@@ -24,8 +24,10 @@ from dna_cancer.data.registry import DatasetMetadata, DatasetRegistry, calculate
 from dna_cancer.data.schema import CancerSequenceSample, DNASample, SampleMetadata, compute_reverse_complement
 from dna_cancer.data.splitter import (
     DatasetSplitter,
+    generate_group_shufflesplit_folds,
     recommend_splitting_strategy,
     split_duplicate_grouped,
+    split_gene_family_cv_folds,
     split_gene_family_grouped,
     split_grouped,
     split_random,
@@ -39,6 +41,7 @@ from dna_cancer.data.validation import (
     validate_dataset_schema,
     validate_dna_sequence,
 )
+from dna_cancer.data.vault import SealedVault
 
 __all__ = [
     # Schema
@@ -81,6 +84,8 @@ __all__ = [
     "split_grouped",
     "split_duplicate_grouped",
     "split_gene_family_grouped",
+    "split_gene_family_cv_folds",
+    "generate_group_shufflesplit_folds",
     "verify_split_leakage",
     "verify_gene_family_leakage",
     # Inspector
@@ -88,4 +93,6 @@ __all__ = [
     "inspect_fasta_file",
     "inspect_collection",
     "format_bytes",
+    # Vault
+    "SealedVault",
 ]

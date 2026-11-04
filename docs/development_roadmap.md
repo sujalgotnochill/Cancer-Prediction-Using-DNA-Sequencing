@@ -152,13 +152,46 @@ This roadmap outlines the systematic evolution of the project from the initial s
 
 ---
 
+## Phase 4.4: Final Evaluation Protocol Verification & Holdout Integrity Audit (Completed)
+- [x] Reconcile Cervical gene-family inventory:
+  - Cataloged all 31 unique human gene families on Chr 15 across 300 Cervical samples.
+  - Forensically reconciled specific target genes (`GOLGA6L22` -> Dev, `UBE3A` -> Dev, `POTEB2` -> Holdout, `SNURF` -> Holdout).
+- [x] Verify Tier 2 Sealed Test Vault ($N=240$):
+  - Balanced class distribution: exactly 60 samples per class across all 4 diagnostic labels.
+  - Cervical holdout: exactly 8 completely unseen human gene families ($17 + 10 + 9 + 7 + 6 + 4 + 4 + 3 = 60$).
+  - Zero cross-partition sequence leakage ($0$ identical sequences across entire 1,200 samples).
+  - Zero cross-partition Cervical gene-family leakage ($0$ gene overlap).
+  - Colorectal duplicate pair (`d6707574`) quarantine: records 90 and 256 retained in Development; holdout uses indices 240..299 without 256 plus index 239.
+  - Documented biological scope: bacterial holdouts test unseen genomic loci/sequences, not multi-transcript gene families.
+- [x] Audit 3-Fold Grouped Cross-Validation on Development Cohort ($N=960$):
+  - Proved all 960 samples assigned to exactly one validation fold.
+  - Per-fold distributions: Fold 0 Val = 352 (Cervical: 112); Folds 1 & 2 Val = 304 (Cervical: 64 each).
+  - Discrepancy reconciled: Phase 4.3 counts (112, 99, 89) on full $N=300$ vs actual Development cohort (112, 64, 64) on $N=240$.
+  - Formally documented statistical limitations of single-gene validation folds (Fold 0 Cervical validates exclusively on `SNRPN`).
+- [x] Audit secondary 10-Iteration Group-Stratified ShuffleSplit:
+  - Verified group disjointness across all 10 iterations.
+  - Established statistical standard: report Median and IQR; strictly prohibit parametric $t$-tests on non-independent resamplings.
+- [x] Implement physical file separation & procedural vault safeguards:
+  - Built `SealedVault` in `src/dna_cancer/data/vault.py`.
+  - Development cohort separated to `data/processed/development_cohort.csv` ($N=960$).
+  - Sealed holdout separated to `artifacts/vault/test_holdout_sealed.json` ($N=240$).
+  - Persistent manifest `artifacts/vault/test_sealed_manifest.json` locked with SHA-256 integrity verification.
+  - Programmatic one-shot authorization unseal enforcement tested and verified.
+- [x] Author comprehensive verification deliverables:
+  - `docs/final_protocol_verification.md`
+  - `docs/holdout_integrity_audit.md`
+  - `artifacts/evaluation/final_protocol_verification.json`
+  - `artifacts/vault/test_sealed_manifest.json`
+- [x] 128 passing unit tests.
+
+---
+
 ## Phase 5: Sealed Cross-Validation & Model Optimization (Next)
-- [ ] Implement Two-Tier Evaluation Architecture:
-  - Generate Tier 1 Development Cohort ($N=960$) and Tier 2 Sealed Test Vault ($N=240$).
-  - Lock out Tier 2 Test Vault from all feature extraction, training, and tuning pipelines.
+- [ ] Implement training and feature pipelines strictly isolated to Tier 1 Development Cohort (`data/processed/development_cohort.csv`, $N=960$):
+  - Confirm Tier 2 Sealed Test Vault remains locked (`is_locked: True`).
 - [ ] Implement Group-Balanced 3-Fold Cross-Validation on Development Set:
-  - Prevent splice-isoform memorization across folds.
-  - Secondary verification via 10-Iteration Group Stratified ShuffleSplit.
+  - Report fold-by-fold validation performance (tracking `SNRPN` sensitivity on Fold 0).
+  - Secondary verification via 10-Iteration Group Stratified ShuffleSplit (Median and IQR).
 - [ ] Feature engineering and representation exploration:
   - TF-IDF $k$-mer representations.
   - Subsequence motif embeddings.
@@ -167,8 +200,8 @@ This roadmap outlines the systematic evolution of the project from the initial s
   - Multi-Layer Perceptrons (MLP) with dropout and batch normalization.
   - 1D Convolutional Neural Networks (1D-CNN) for sequence motif detection.
 - [ ] Final One-Shot Evaluation on Sealed Test Vault:
-  - Unseal test set strictly once for the single winning architecture.
-  - Report unbiased generalization performance with 95% confidence intervals and confusion matrix.
+  - Unseal test set strictly once (`vault.unseal(token="PHASE_5_FINAL_UNSEAL")`) for the single winning architecture.
+  - Report unbiased generalization performance with 95% Wilson Score CIs for accuracy/recalls and 1,000-iteration Bootstrap CI for Macro F1.
 
 ---
 

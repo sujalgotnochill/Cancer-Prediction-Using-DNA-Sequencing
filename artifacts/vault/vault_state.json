@@ -1,0 +1,8 @@
+{
+  "status": "LOCKED",
+  "unsealed": false,
+  "unseal_count": 0,
+  "unsealed_at": null,
+  "unseal_token": null,
+  "unseal_reason": null
+}

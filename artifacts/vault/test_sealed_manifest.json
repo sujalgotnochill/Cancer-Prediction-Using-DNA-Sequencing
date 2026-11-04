@@ -1,0 +1,63 @@
+{
+  "manifest_version": "1.0.0",
+  "created_at": "2026-11-04T16:29:36.768085",
+  "source_dataset": "data/interim/historical_reconstruction/DNAdata_reconstructed.csv",
+  "source_sha256": "eb14d47f3eeea2684313ff8a5cb726f431fbfba62eaf371f618e3a444a245bc3",
+  "development_cohort": {
+    "path": "data/processed/development_cohort.csv",
+    "sample_count": 960,
+    "class_distribution": {
+      "Cervical Cancer": 240,
+      "Colorectal Cancer": 240,
+      "Endometrial Cancer": 240,
+      "Liver Cancer": 240
+    },
+    "sha256": "7c35fc4f226488cfc2d37ed332746be3f3c1aa8982ab7a8991c7fb374781475c"
+  },
+  "sealed_holdout": {
+    "path": "artifacts/vault/test_holdout_sealed.json",
+    "sample_count": 240,
+    "class_distribution": {
+      "Cervical Cancer": 60,
+      "Colorectal Cancer": 60,
+      "Endometrial Cancer": 60,
+      "Liver Cancer": 60
+    },
+    "cervical_holdout_genes": [
+      {
+        "gene": "ATP10A",
+        "sample_count": 9
+      },
+      {
+        "gene": "CYFIP1",
+        "sample_count": 10
+      },
+      {
+        "gene": "GABRA5",
+        "sample_count": 7
+      },
+      {
+        "gene": "GABRB3",
+        "sample_count": 6
+      },
+      {
+        "gene": "POTEB",
+        "sample_count": 4
+      },
+      {
+        "gene": "POTEB2",
+        "sample_count": 4
+      },
+      {
+        "gene": "SNURF",
+        "sample_count": 3
+      },
+      {
+        "gene": "TUBGCP5",
+        "sample_count": 17
+      }
+    ],
+    "sha256": "430a2e6f8b4b85dfb8bd6a16300e44417a374853a2eb7616a8e5d6d9116db940"
+  },
+  "safeguard_contract": "This sealed vault is protected by a software procedural lock and access-logging contract. The holdout partition must remain sealed until model architecture and hyperparameters are frozen. This mechanism prevents accidental data leakage during automated optimization loops but does not provide operating-system or cryptographic isolation."
+}
