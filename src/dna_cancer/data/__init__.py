@@ -25,9 +25,11 @@ from dna_cancer.data.schema import CancerSequenceSample, DNASample, SampleMetada
 from dna_cancer.data.splitter import (
     DatasetSplitter,
     recommend_splitting_strategy,
+    split_duplicate_grouped,
     split_grouped,
     split_random,
     split_stratified,
+    verify_split_leakage,
 )
 from dna_cancer.data.validation import (
     SequenceValidator,
@@ -75,6 +77,8 @@ __all__ = [
     "split_random",
     "split_stratified",
     "split_grouped",
+    "split_duplicate_grouped",
+    "verify_split_leakage",
     # Inspector
     "FastaFileSummary",
     "inspect_fasta_file",

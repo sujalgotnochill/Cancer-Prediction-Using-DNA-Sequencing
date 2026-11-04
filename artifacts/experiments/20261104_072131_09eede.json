@@ -1,0 +1,124 @@
+{
+  "run_id": "20261104_072131_09eede",
+  "run_name": "LogisticRegression_stratified_k3",
+  "experiment_name": "dna_baseline_benchmarks",
+  "timestamp": "2026-11-04T07:21:31.821777+00:00",
+  "dataset": {
+    "dataset_id": "DNAdata_historical_reconstruction",
+    "checksum_sha256": "eb14d47f3eeea2684313ff8a5cb726f431fbfba62eaf371f618e3a444a245bc3"
+  },
+  "split_configuration": {
+    "strategy": "stratified",
+    "train_size": 0.7,
+    "val_size": 0.15,
+    "test_size": 0.15,
+    "train_count": 840,
+    "val_count": 180,
+    "test_count": 180,
+    "is_leakage_free": false,
+    "sequence_leakage": {
+      "has_leakage": true,
+      "train_val_overlap_count": 9,
+      "train_test_overlap_count": 11,
+      "val_test_overlap_count": 6
+    }
+  },
+  "feature_configuration": {
+    "k": 3,
+    "stride": 1,
+    "vectorizer_type": "count",
+    "n_features": 64
+  },
+  "model": {
+    "name": "LogisticRegression",
+    "parameters": {
+      "C": 1.0,
+      "max_iter": 1000,
+      "random_state": 42,
+      "solver": "lbfgs",
+      "multi_class": "auto"
+    },
+    "random_seed": 42
+  },
+  "durations": {
+    "training_seconds": 0.3992,
+    "prediction_seconds": 0.0164
+  },
+  "metrics": {
+    "accuracy": 0.95,
+    "precision_macro": 0.9501,
+    "recall_macro": 0.95,
+    "f1_macro": 0.95,
+    "confusion_matrix": [
+      [
+        44,
+        1,
+        0,
+        0
+      ],
+      [
+        0,
+        42,
+        2,
+        1
+      ],
+      [
+        1,
+        3,
+        41,
+        0
+      ],
+      [
+        0,
+        0,
+        1,
+        44
+      ]
+    ],
+    "per_class": {
+      "Cervical Cancer": {
+        "precision": 0.9777777777777777,
+        "recall": 0.9777777777777777,
+        "f1-score": 0.9777777777777777,
+        "support": 45.0
+      },
+      "Colorectal Cancer": {
+        "precision": 0.9130434782608695,
+        "recall": 0.9333333333333333,
+        "f1-score": 0.9230769230769231,
+        "support": 45.0
+      },
+      "Endometrial Cancer": {
+        "precision": 0.9318181818181818,
+        "recall": 0.9111111111111111,
+        "f1-score": 0.9213483146067416,
+        "support": 45.0
+      },
+      "Liver Cancer": {
+        "precision": 0.9777777777777777,
+        "recall": 0.9777777777777777,
+        "f1-score": 0.9777777777777777,
+        "support": 45.0
+      },
+      "accuracy": 0.95,
+      "macro avg": {
+        "precision": 0.9501043039086517,
+        "recall": 0.95,
+        "f1-score": 0.9499951983098051,
+        "support": 180.0
+      },
+      "weighted avg": {
+        "precision": 0.9501043039086517,
+        "recall": 0.95,
+        "f1-score": 0.9499951983098052,
+        "support": 180.0
+      }
+    }
+  },
+  "artifacts": {
+    "model_checkpoint": "artifacts\\models\\logisticregression_stratified_k3\\model.joblib",
+    "vectorizer": "artifacts\\vectorizers\\kmer_stratified_k3\\vectorizer.joblib"
+  },
+  "tags": {},
+  "scientific_limitation_notice": "Educational sequence-classification benchmark. The evaluated dataset contains human chromosome 15 transcripts and bacterial genomic sequences. Labels are not verified clinical cancer diagnoses; results do not represent clinical prediction performance."
+}

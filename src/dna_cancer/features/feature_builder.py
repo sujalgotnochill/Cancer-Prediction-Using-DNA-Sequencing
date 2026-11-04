@@ -31,13 +31,17 @@ class FeatureBuilder:
         k: int = 6,
         stride: int = 1,
         vectorizer_type: str = "count",
-        ngram_range: Tuple[int, int] = (4, 4),
-        max_features: Optional[int] = 10000,
+        ngram_range: Tuple[int, int] = (1, 1),
+        max_features: Optional[int] = None,
+        return_sparse: bool = False,
     ) -> None:
+        self.k = k
+        self.stride = stride
         self.kmer_extractor = KMerExtractor(k=k, stride=stride, to_lower=True, as_sentence=True)
         self.vectorizer_type = vectorizer_type.lower()
         self.ngram_range = ngram_range
         self.max_features = max_features
+        self.return_sparse = return_sparse
 
         self.vectorizer = None
         if self.vectorizer_type == "count":
@@ -88,8 +92,18 @@ class FeatureBuilder:
         self.is_fitted = True
         return self
 
-    def transform_sequences(self, sequences: List[str]) -> Any:
-        """Transform DNA sequences into vector feature matrix."""
+    def transform_sequences(
+        self,
+        sequences: List[str],
+        return_sparse: Optional[bool] = None,
+    ) -> Any:
+        """Transform DNA sequences into vector feature matrix.
+
+        Args:
+            sequences: List of raw DNA nucleotide strings.
+            return_sparse: If True, returns scipy sparse matrix. If False, returns numpy ndarray.
+                If None, defaults to self.return_sparse.
+        """
         if not self.is_fitted:
             raise FeatureExtractionError("FeatureBuilder has not been fitted yet.")
         self._ensure_vectorizer()
@@ -99,7 +113,28 @@ class FeatureBuilder:
 
         sentences = [self.kmer_extractor.extract(s) for s in sequences]
         matrix = self.vectorizer.transform(sentences)
+        
+        use_sparse = self.return_sparse if return_sparse is None else return_sparse
+        if use_sparse:
+            return matrix
         return matrix.toarray()
+
+    @property
+    def n_features(self) -> int:
+        """Return number of extracted features."""
+        if not self.is_fitted or self.vectorizer is None:
+            return 0
+        if hasattr(self.vectorizer, "vocabulary_"):
+            return len(self.vectorizer.vocabulary_)
+        return 0
+
+    def get_feature_names(self) -> List[str]:
+        """Return names of vocabulary features."""
+        if not self.is_fitted or self.vectorizer is None:
+            return []
+        if hasattr(self.vectorizer, "get_feature_names_out"):
+            return list(self.vectorizer.get_feature_names_out())
+        return []
 
     def transform_labels(self, labels: List[str]) -> Any:
         """Transform string cancer labels into integer classes."""

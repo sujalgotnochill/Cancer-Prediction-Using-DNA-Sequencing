@@ -1,5 +1,6 @@
 """Dataset partitioning and splitting module with leakage prevention."""
 
+import hashlib
 import random
 from collections import defaultdict
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
@@ -208,6 +209,175 @@ def split_grouped(
     return train_out, val_out, test_out
 
 
+def split_duplicate_grouped(
+    samples: List[DNASample],
+    train_size: float = 0.70,
+    val_size: float = 0.15,
+    test_size: float = 0.15,
+    seed: int = 42,
+    group_by: str = "sequence",
+) -> Tuple[List[DNASample], List[DNASample], List[DNASample]]:
+    """Partition samples grouping identical sequences (or transcript/gene families) together.
+
+    Guarantees that no identical sequence appears in multiple splits.
+    Maintains class balance by stratifying sequence groups by their assigned class label.
+
+    Args:
+        samples: List of DNASample objects.
+        train_size: Proportion of groups for training.
+        val_size: Proportion of groups for validation.
+        test_size: Proportion of groups for test.
+        seed: Random seed for group shuffling.
+        group_by: 'sequence' (hash of normalized DNA) or 'gene' (sample gene metadata).
+
+    Returns:
+        Tuple of (train_samples, val_samples, test_samples).
+    """
+    _validate_split_ratios(train_size, val_size, test_size)
+    if not samples:
+        raise DataValidationError("Cannot split empty sample list.")
+
+    # 1. Assign each sample to a group
+    seq_groups: Dict[str, List[DNASample]] = defaultdict(list)
+    for idx, s in enumerate(samples):
+        if group_by == "gene" and getattr(s.metadata, "gene", None):
+            grp_id = f"gene_{s.metadata.gene}"
+        elif group_by == "gene" and s.metadata.additional_metadata.get("gene"):
+            grp_id = f"gene_{s.metadata.additional_metadata['gene']}"
+        else:
+            # Hash canonicalized uppercase sequence
+            norm_seq = s.sequence.strip().upper()
+            grp_id = "seq_" + hashlib.sha256(norm_seq.encode("utf-8")).hexdigest()
+        seq_groups[grp_id].append(s)
+
+    # 2. Map groups to their primary label for stratified group partitioning
+    label_to_group_ids: Dict[str, List[str]] = defaultdict(list)
+    for grp_id, grp_samples in seq_groups.items():
+        # Use dominant label in group
+        lbl_counts = defaultdict(int)
+        for s in grp_samples:
+            lbl_counts[s.label or "Unlabeled"] += 1
+        primary_lbl = max(lbl_counts.items(), key=lambda x: x[1])[0]
+        label_to_group_ids[primary_lbl].append(grp_id)
+
+    rng = random.Random(seed)
+    train_group_ids: Set[str] = set()
+    val_group_ids: Set[str] = set()
+    test_group_ids: Set[str] = set()
+
+    for lbl, g_ids in label_to_group_ids.items():
+        shuffled = list(g_ids)
+        rng.shuffle(shuffled)
+        n_g = len(shuffled)
+
+        if n_g < 3:
+            # Minority group fallback
+            train_group_ids.update(shuffled[: max(1, int(train_size * n_g))])
+            rem = shuffled[max(1, int(train_size * n_g)) :]
+            if rem:
+                test_group_ids.add(rem[0])
+            continue
+
+        n_train = max(1, int(train_size * n_g))
+        n_val = int(val_size * n_g)
+
+        train_group_ids.update(shuffled[:n_train])
+        val_group_ids.update(shuffled[n_train : n_train + n_val])
+        test_group_ids.update(shuffled[n_train + n_val :])
+
+    # Assert zero overlap between group ID sets
+    assert not (train_group_ids & val_group_ids), "Duplicate leakage between train and val groups!"
+    assert not (train_group_ids & test_group_ids), "Duplicate leakage between train and test groups!"
+    assert not (val_group_ids & test_group_ids), "Duplicate leakage between val and test groups!"
+
+    train_out: List[DNASample] = []
+    val_out: List[DNASample] = []
+    test_out: List[DNASample] = []
+
+    for grp_id, grp_samples in seq_groups.items():
+        if grp_id in train_group_ids:
+            train_out.extend(grp_samples)
+        elif grp_id in val_group_ids:
+            val_out.extend(grp_samples)
+        else:
+            test_out.extend(grp_samples)
+
+    rng.shuffle(train_out)
+    rng.shuffle(val_out)
+    rng.shuffle(test_out)
+
+    logger.info(
+        "Duplicate-grouped split (%d unique groups, group_by='%s'): train=%d samples (%d groups), val=%d samples (%d groups), test=%d samples (%d groups)",
+        len(seq_groups),
+        group_by,
+        len(train_out),
+        len(train_group_ids),
+        len(val_out),
+        len(val_group_ids),
+        len(test_out),
+        len(test_group_ids),
+    )
+
+    return train_out, val_out, test_out
+
+
+def verify_split_leakage(
+    train: List[DNASample],
+    val: List[DNASample],
+    test: List[DNASample],
+    group_key: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Inspect partitions to detect sequence-level or group-level data leakage."""
+    train_seqs = {s.sequence.strip().upper() for s in train}
+    val_seqs = {s.sequence.strip().upper() for s in val}
+    test_seqs = {s.sequence.strip().upper() for s in test}
+
+    seq_leak_tv = train_seqs & val_seqs
+    seq_leak_tt = train_seqs & test_seqs
+    seq_leak_vt = val_seqs & test_seqs
+    has_seq_leakage = bool(seq_leak_tv or seq_leak_tt or seq_leak_vt)
+
+    group_leakage = False
+    grp_leak_tv = set()
+    grp_leak_tt = set()
+    grp_leak_vt = set()
+
+    if group_key:
+        def _get_groups(subset: List[DNASample]) -> Set[str]:
+            res = set()
+            for s in subset:
+                g = getattr(s, group_key, None) or s.metadata.additional_metadata.get(group_key)
+                if g:
+                    res.add(str(g))
+            return res
+
+        t_grp = _get_groups(train)
+        v_grp = _get_groups(val)
+        tt_grp = _get_groups(test)
+
+        grp_leak_tv = t_grp & v_grp
+        grp_leak_tt = t_grp & tt_grp
+        grp_leak_vt = v_grp & tt_grp
+        group_leakage = bool(grp_leak_tv or grp_leak_tt or grp_leak_vt)
+
+    return {
+        "is_leakage_free": not (has_seq_leakage or group_leakage),
+        "sequence_leakage": {
+            "has_leakage": has_seq_leakage,
+            "train_val_overlap_count": len(seq_leak_tv),
+            "train_test_overlap_count": len(seq_leak_tt),
+            "val_test_overlap_count": len(seq_leak_vt),
+        },
+        "group_leakage": {
+            "group_key": group_key,
+            "has_leakage": group_leakage,
+            "train_val_overlap_count": len(grp_leak_tv),
+            "train_test_overlap_count": len(grp_leak_tt),
+            "val_test_overlap_count": len(grp_leak_vt),
+        },
+    }
+
+
 class DatasetSplitter:
     """Configurable dataset splitting coordinator."""
 
@@ -249,6 +419,15 @@ class DatasetSplitter:
                 test_size=self.test_size,
                 seed=self.seed,
             )
+        elif strat == "duplicate_grouped":
+            return split_duplicate_grouped(
+                samples=samples,
+                train_size=self.train_size,
+                val_size=self.val_size,
+                test_size=self.test_size,
+                seed=self.seed,
+                group_by="sequence",
+            )
         elif strat == "stratified":
             return split_stratified(
                 samples=samples,
@@ -266,7 +445,9 @@ class DatasetSplitter:
                 seed=self.seed,
             )
         else:
-            raise DataValidationError(f"Unsupported splitting strategy: '{strat}'. Supported: auto, group, stratified, random")
+            raise DataValidationError(
+                f"Unsupported splitting strategy: '{strat}'. Supported: auto, duplicate_grouped, group, stratified, random"
+            )
 
     def summarize_split(
         self,
