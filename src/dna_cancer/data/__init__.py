@@ -26,9 +26,11 @@ from dna_cancer.data.splitter import (
     DatasetSplitter,
     recommend_splitting_strategy,
     split_duplicate_grouped,
+    split_gene_family_grouped,
     split_grouped,
     split_random,
     split_stratified,
+    verify_gene_family_leakage,
     verify_split_leakage,
 )
 from dna_cancer.data.validation import (
@@ -78,7 +80,9 @@ __all__ = [
     "split_stratified",
     "split_grouped",
     "split_duplicate_grouped",
+    "split_gene_family_grouped",
     "verify_split_leakage",
+    "verify_gene_family_leakage",
     # Inspector
     "FastaFileSummary",
     "inspect_fasta_file",

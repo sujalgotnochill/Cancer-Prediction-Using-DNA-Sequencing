@@ -321,6 +321,241 @@ def split_duplicate_grouped(
     return train_out, val_out, test_out
 
 
+def split_gene_family_grouped(
+    samples: List[DNASample],
+    train_size: float = 0.70,
+    val_size: float = 0.15,
+    test_size: float = 0.15,
+    seed: int = 42,
+    strict_metadata_only: bool = False,
+    gene_key: str = "gene",
+    grouping_mode: str = "within_organism",
+) -> Tuple[List[DNASample], List[DNASample], List[DNASample]]:
+    """Partition samples grouping gene families together to prevent transcript-isoform leakage.
+
+    Guarantees that no gene family appears in multiple splits.
+    
+    Grouping modes:
+      - 'within_organism' (default): Groups by (organism/label, gene). Prevents transcript-isoform
+        leakage within each biological source while correctly treating matching gene symbols across
+        distinct bacterial phyla (e.g. coxA in S. amylolyticus vs A. pallidiroseus) as distinct groups.
+      - 'cross_organism': Groups identical gene symbols globally across all classes regardless of organism.
+        (Note: Sequence-level orthology is not verified across distinct bacterial phyla).
+      - 'exact_sequence': Groups strictly by exact nucleotide sequence hash.
+
+    For samples lacking explicit gene annotations:
+      - If strict_metadata_only=True: samples without gene metadata are excluded from partitioning.
+      - If strict_metadata_only=False: samples fall back to sequence-hash grouping, ensuring identical sequences
+        are never split across partitions while keeping all available samples. Fallback sequence hashes
+        are tracked transparently and never misrepresented as biological gene families.
+
+    Args:
+        samples: List of DNASample objects.
+        train_size: Proportion of groups for training.
+        val_size: Proportion of groups for validation.
+        test_size: Proportion of groups for test.
+        seed: Random seed for group shuffling.
+        strict_metadata_only: If True, exclude samples lacking gene metadata.
+        gene_key: Metadata field to use for gene family (default: 'gene').
+        grouping_mode: 'within_organism', 'cross_organism', or 'exact_sequence'.
+
+    Returns:
+        Tuple of (train_samples, val_samples, test_samples).
+    """
+    _validate_split_ratios(train_size, val_size, test_size)
+    if not samples:
+        raise DataValidationError("Cannot split empty sample list.")
+
+    if strict_metadata_only:
+        active_samples = [
+            s for s in samples
+            if (getattr(s.metadata, gene_key, None) or s.metadata.additional_metadata.get(gene_key))
+        ]
+        if len(active_samples) < 3:
+            raise DataValidationError(
+                f"Strict gene-family splitting requires at least 3 samples with '{gene_key}' metadata, found {len(active_samples)}."
+            )
+        logger.info(
+            "Strict gene-family filter: retained %d samples with verified '%s' annotations (excluded %d unannotated)",
+            len(active_samples), gene_key, len(samples) - len(active_samples)
+        )
+    else:
+        active_samples = samples
+
+    if grouping_mode == "cross_organism":
+        logger.warning(
+            "Grouping mode 'cross_organism' active: matching gene symbols will be grouped globally across "
+            "distinct organisms without verified sequence-level orthology."
+        )
+
+    # Assign each sample to a group
+    groups: Dict[str, List[DNASample]] = defaultdict(list)
+    bio_group_count = 0
+    seq_group_count = 0
+
+    for s in active_samples:
+        gene = getattr(s.metadata, gene_key, None) or s.metadata.additional_metadata.get(gene_key)
+        norm_seq = s.sequence.strip().upper()
+        seq_hash = hashlib.sha256(norm_seq.encode("utf-8")).hexdigest()
+
+        if grouping_mode == "exact_sequence" or (not gene):
+            # Fallback exact sequence grouping: ensure identical sequences never split across partitions
+            grp_id = f"seq_{seq_hash}"
+            seq_group_count += 1
+        elif grouping_mode == "within_organism":
+            # Within-organism gene family grouping: incorporate organism/label context
+            org_ctx = s.metadata.organism or s.label or "unspecified"
+            grp_id = f"gene_{org_ctx}_{str(gene).strip()}"
+            bio_group_count += 1
+        elif grouping_mode == "cross_organism":
+            # Global cross-organism gene grouping
+            grp_id = f"gene_{str(gene).strip()}"
+            bio_group_count += 1
+        else:
+            raise DataValidationError(
+                f"Unsupported grouping_mode: '{grouping_mode}'. Supported: 'within_organism', 'cross_organism', 'exact_sequence'"
+            )
+
+        groups[grp_id].append(s)
+
+    # Map groups to their primary label for stratified group partitioning
+    label_to_group_ids: Dict[str, List[str]] = defaultdict(list)
+    for grp_id, grp_samples in groups.items():
+        lbl_counts = defaultdict(int)
+        for s in grp_samples:
+            lbl_counts[s.label or "Unlabeled"] += 1
+        primary_lbl = max(lbl_counts.items(), key=lambda x: x[1])[0]
+        label_to_group_ids[primary_lbl].append(grp_id)
+
+    rng = random.Random(seed)
+    train_group_ids: Set[str] = set()
+    val_group_ids: Set[str] = set()
+    test_group_ids: Set[str] = set()
+
+    for lbl, g_ids in label_to_group_ids.items():
+        shuffled = list(g_ids)
+        rng.shuffle(shuffled)
+        n_g = len(shuffled)
+
+        if n_g < 3:
+            train_group_ids.update(shuffled[: max(1, int(train_size * n_g))])
+            rem = shuffled[max(1, int(train_size * n_g)) :]
+            if rem:
+                test_group_ids.add(rem[0])
+            continue
+
+        n_train = max(1, int(train_size * n_g))
+        n_val = int(val_size * n_g)
+
+        train_group_ids.update(shuffled[:n_train])
+        val_group_ids.update(shuffled[n_train : n_train + n_val])
+        test_group_ids.update(shuffled[n_train + n_val :])
+
+    assert not (train_group_ids & val_group_ids), "Gene-family leakage between train and val groups!"
+    assert not (train_group_ids & test_group_ids), "Gene-family leakage between train and test groups!"
+    assert not (val_group_ids & test_group_ids), "Gene-family leakage between val and test groups!"
+
+    train_out: List[DNASample] = []
+    val_out: List[DNASample] = []
+    test_out: List[DNASample] = []
+
+    for grp_id, grp_samples in groups.items():
+        if grp_id in train_group_ids:
+            train_out.extend(grp_samples)
+        elif grp_id in val_group_ids:
+            val_out.extend(grp_samples)
+        else:
+            test_out.extend(grp_samples)
+
+    rng.shuffle(train_out)
+    rng.shuffle(val_out)
+    rng.shuffle(test_out)
+
+    logger.info(
+        "Gene-family split (%d unique groups, mode='%s', strict=%s): train=%d samples (%d groups), val=%d samples (%d groups), test=%d samples (%d groups)",
+        len(groups),
+        grouping_mode,
+        strict_metadata_only,
+        len(train_out),
+        len(train_group_ids),
+        len(val_out),
+        len(val_group_ids),
+        len(test_out),
+        len(test_group_ids),
+    )
+
+    return train_out, val_out, test_out
+
+
+def verify_gene_family_leakage(
+    train: List[DNASample],
+    val: List[DNASample],
+    test: List[DNASample],
+    gene_key: str = "gene",
+    grouping_mode: str = "within_organism",
+) -> Dict[str, Any]:
+    """Inspect partitions to detect gene-family leakage across train/val/test splits."""
+    def _get_entries(subset: List[DNASample]) -> Set[Tuple[str, str]]:
+        res = set()
+        for s in subset:
+            g = getattr(s.metadata, gene_key, None) or s.metadata.additional_metadata.get(gene_key)
+            if g:
+                org = s.metadata.organism or s.label or "unspecified"
+                res.add((str(org).strip(), str(g).strip()))
+        return res
+
+    train_entries = _get_entries(train)
+    val_entries = _get_entries(val)
+    test_entries = _get_entries(test)
+
+    if grouping_mode == "within_organism":
+        leak_tv_pairs = train_entries & val_entries
+        leak_tt_pairs = train_entries & test_entries
+        leak_vt_pairs = val_entries & test_entries
+    else:
+        # Cross-organism matching of raw gene symbols
+        train_genes = {g for _, g in train_entries}
+        val_genes = {g for _, g in val_entries}
+        test_genes = {g for _, g in test_entries}
+        leak_tv_pairs = {(o, g) for o, g in train_entries if g in val_genes}
+        leak_tt_pairs = {(o, g) for o, g in train_entries if g in test_genes}
+        leak_vt_pairs = {(o, g) for o, g in val_entries if g in test_genes}
+
+    has_leakage = bool(leak_tv_pairs or leak_tt_pairs or leak_vt_pairs)
+
+    # Cross-organism shared symbol check (informational)
+    t_genes = {g for _, g in train_entries}
+    v_genes = {g for _, g in val_entries}
+    te_genes = {g for _, g in test_entries}
+    cross_tv = t_genes & v_genes
+    cross_tt = t_genes & te_genes
+    cross_vt = v_genes & te_genes
+
+    all_annotated = {g for _, g in (train_entries | val_entries | test_entries)}
+
+    return {
+        "is_leakage_free": not has_leakage,
+        "grouping_mode": grouping_mode,
+        "total_annotated_genes": len(all_annotated),
+        "train_genes_count": len(t_genes),
+        "val_genes_count": len(v_genes),
+        "test_genes_count": len(te_genes),
+        "train_val_overlap": sorted(list({g for _, g in leak_tv_pairs})),
+        "train_test_overlap": sorted(list({g for _, g in leak_tt_pairs})),
+        "val_test_overlap": sorted(list({g for _, g in leak_vt_pairs})),
+        "detailed_overlap_pairs": {
+            "train_val": sorted([f"{o}:{g}" for o, g in leak_tv_pairs]),
+            "train_test": sorted([f"{o}:{g}" for o, g in leak_tt_pairs]),
+            "val_test": sorted([f"{o}:{g}" for o, g in leak_vt_pairs]),
+        },
+        "cross_organism_shared_symbols": {
+            "train_val": sorted(list(cross_tv - {g for _, g in leak_tv_pairs})),
+            "train_test": sorted(list(cross_tt - {g for _, g in leak_tt_pairs})),
+            "val_test": sorted(list(cross_vt - {g for _, g in leak_vt_pairs})),
+        },
+    }
+
+
 def verify_split_leakage(
     train: List[DNASample],
     val: List[DNASample],
@@ -389,6 +624,9 @@ class DatasetSplitter:
         test_size: float = 0.15,
         seed: int = 42,
         group_key: str = "patient_id",
+        gene_key: str = "gene",
+        strict_metadata_only: bool = False,
+        grouping_mode: str = "within_organism",
     ) -> None:
         self.strategy = strategy.lower()
         self.train_size = train_size
@@ -396,6 +634,9 @@ class DatasetSplitter:
         self.test_size = test_size
         self.seed = seed
         self.group_key = group_key
+        self.gene_key = gene_key
+        self.strict_metadata_only = strict_metadata_only
+        self.grouping_mode = grouping_mode
         self.last_strategy_used: Optional[str] = None
 
     def split(
@@ -428,6 +669,17 @@ class DatasetSplitter:
                 seed=self.seed,
                 group_by="sequence",
             )
+        elif strat == "gene_family_grouped":
+            return split_gene_family_grouped(
+                samples=samples,
+                train_size=self.train_size,
+                val_size=self.val_size,
+                test_size=self.test_size,
+                seed=self.seed,
+                strict_metadata_only=self.strict_metadata_only,
+                gene_key=self.gene_key,
+                grouping_mode=self.grouping_mode,
+            )
         elif strat == "stratified":
             return split_stratified(
                 samples=samples,
@@ -446,7 +698,7 @@ class DatasetSplitter:
             )
         else:
             raise DataValidationError(
-                f"Unsupported splitting strategy: '{strat}'. Supported: auto, duplicate_grouped, group, stratified, random"
+                f"Unsupported splitting strategy: '{strat}'. Supported: auto, duplicate_grouped, gene_family_grouped, group, stratified, random"
             )
 
     def summarize_split(
