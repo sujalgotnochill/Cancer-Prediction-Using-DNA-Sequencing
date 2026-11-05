@@ -286,7 +286,7 @@ class TestWebApplication(unittest.TestCase):
         self.assertEqual(self.app.history_service.count_predictions(), 0)
 
     # ----------------------------------------------------------------------
-    # 5. Missing / Corrupted Artifacts Handling
+    # 5. Missing / Corrupted Artifacts Handling & Integrity Verification
     # ----------------------------------------------------------------------
     def test_missing_artifact_handling(self) -> None:
         """Verify PredictionService raises PredictionServiceError gracefully on missing artifacts."""
@@ -294,6 +294,76 @@ class TestWebApplication(unittest.TestCase):
             with self.assertRaises(PredictionServiceError) as ctx:
                 PredictionService(model_dir=Path(empty_dir))
             self.assertIn("Missing required Phase 5 model artifacts", str(ctx.exception))
+
+    def test_artifact_checksum_mismatch_detection(self) -> None:
+        """Verify PredictionService detects corrupted model artifacts and rejects loading."""
+        src_dir = Path("artifacts/models/phase5_best_candidate")
+        if not src_dir.exists():
+            self.skipTest("Base artifacts directory not available for tampering test")
+
+        with tempfile.TemporaryDirectory() as temp_model_dir:
+            temp_path = Path(temp_model_dir)
+            # Copy valid artifacts
+            for item in src_dir.iterdir():
+                if item.is_file():
+                    shutil.copy2(item, temp_path / item.name)
+
+            # Corrupt model.joblib by appending a byte
+            with open(temp_path / "model.joblib", "ab") as f:
+                f.write(b"CORRUPTION_BYTES")
+
+            with self.assertRaises(PredictionServiceError) as ctx:
+                PredictionService(model_dir=temp_path)
+            self.assertIn("Integrity check failed", str(ctx.exception))
+            self.assertIn("Checksum mismatch", str(ctx.exception))
+
+    def test_degraded_application_when_model_missing(self) -> None:
+        """Verify web application runs gracefully in degraded mode when artifacts are absent."""
+        with tempfile.TemporaryDirectory() as empty_dir:
+            degraded_app = create_app({
+                "TESTING": True,
+                "WTF_CSRF_ENABLED": False,
+                "MODEL_DIR": Path(empty_dir),
+                "DATABASE_PATH": Path(self.temp_dir) / "degraded_history.db",
+            })
+            deg_client = degraded_app.test_client()
+
+            # 1. Health endpoint reports degraded status
+            res_health = deg_client.get("/api/health")
+            self.assertEqual(res_health.status_code, 200)
+            health_data = res_health.get_json()
+            self.assertEqual(health_data["status"], "degraded")
+            self.assertFalse(health_data["model_ready"])
+            self.assertTrue(health_data["setup_required"])
+
+            # 2. Home page shows setup warning banner
+            res_home = deg_client.get("/")
+            self.assertEqual(res_home.status_code, 200)
+            home_html = res_home.get_data(as_text=True)
+            self.assertIn("Model Artifacts Missing", home_html)
+            self.assertIn("download_model_artifacts.py", home_html)
+
+            # 3. Predict endpoint returns 503 on JSON request with setup instructions
+            res_predict_json = deg_client.post(
+                "/predict",
+                data={"sequence_text": "ATGC" * 30},
+                headers={"Accept": "application/json"},
+            )
+            self.assertEqual(res_predict_json.status_code, 503)
+            self.assertIn("download_model_artifacts.py", res_predict_json.get_json()["error"])
+
+    def test_predict_with_json_payload(self) -> None:
+        """Verify predict endpoint handles native application/json request payloads."""
+        seq = "ATGC" * 30
+        response = self.client.post(
+            "/predict",
+            json={"sequence_text": seq},
+            headers={"Accept": "application/json"},
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertIn("predicted_class", data)
+        self.assertEqual(data["sequence_length"], 120)
 
     # ----------------------------------------------------------------------
     # 6. CSRF Protection Enforcement

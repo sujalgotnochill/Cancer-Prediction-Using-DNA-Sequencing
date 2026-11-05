@@ -63,7 +63,7 @@ Desktop.ini
 *.env
 !.env.example
 
-# Large model artifacts & weights
+# Large model artifacts & weights (allow lightweight frozen Phase 5 candidate: ~20 KB total)
 *.keras
 *.h5
 *.hdf5
@@ -73,6 +73,7 @@ Desktop.ini
 *.pt
 *.pth
 *.onnx
+!artifacts/models/phase5_best_candidate/*.joblib
 
 # Data directories (preserve folder structure via .gitkeep)
 data/raw/*
@@ -86,6 +87,8 @@ data/processed/*
 # Artifact directories (preserve folder structure via .gitkeep)
 artifacts/models/*
 !artifacts/models/.gitkeep
+!artifacts/models/phase5_best_candidate/
+!artifacts/models/phase5_best_candidate/**
 artifacts/vectorizers/*
 !artifacts/vectorizers/.gitkeep
 artifacts/encoders/*
@@ -96,6 +99,11 @@ artifacts/datasets/*
 !artifacts/datasets/.gitkeep
 artifacts/history/*
 !artifacts/history/.gitkeep
+
+# Evaluation vault sensitive holdout data (preserve audit receipts & manifest)
+artifacts/vault/*holdout*.json
+artifacts/vault/*sealed*.json
+!artifacts/vault/test_sealed_manifest.json
 *.db
 *.sqlite
 *.sqlite3

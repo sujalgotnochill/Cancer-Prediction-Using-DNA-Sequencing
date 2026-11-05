@@ -39,12 +39,43 @@ class DNAPredictor:
         encoder_path: Optional[Union[str, Path]] = None,
         k: Optional[int] = None,
         canonical: Optional[bool] = None,
+        verify_checksums: bool = False,
     ) -> "DNAPredictor":
         """Factory method to instantiate a predictor from saved artifact files."""
-        model = ModelFactory.load(model_name, model_path)
+        model_p = Path(model_path)
+        vec_p = Path(vectorizer_path)
+        enc_p = Path(encoder_path) if encoder_path else None
+
+        if verify_checksums:
+            chk_file = model_p.parent / "checksums.sha256"
+            if chk_file.exists():
+                import hashlib
+                expected_hashes: Dict[str, str] = {}
+                with open(chk_file, "r", encoding="utf-8") as cf:
+                    for line in cf:
+                        line = line.strip()
+                        if line and not line.startswith("#"):
+                            parts = line.split(None, 1)
+                            if len(parts) == 2:
+                                expected_hashes[Path(parts[1].strip()).name] = parts[0].strip().lower()
+
+                for path_obj in [model_p, vec_p, enc_p]:
+                    if path_obj and path_obj.name in expected_hashes:
+                        h = hashlib.sha256()
+                        with open(path_obj, "rb") as bf:
+                            while chunk := bf.read(65536):
+                                h.update(chunk)
+                        actual_sha = h.hexdigest().lower()
+                        if actual_sha != expected_hashes[path_obj.name]:
+                            raise PredictionError(
+                                f"Checksum mismatch for artifact '{path_obj.name}': "
+                                f"expected {expected_hashes[path_obj.name]}, got {actual_sha}"
+                            )
+
+        model = ModelFactory.load(model_name, model_p)
 
         # Inspect sibling model_config.json if available to infer k and canonical representations
-        config_path = Path(model_path).parent / "model_config.json"
+        config_path = model_p.parent / "model_config.json"
         if config_path.exists():
             try:
                 import json
@@ -61,7 +92,7 @@ class DNAPredictor:
         init_k = k if k is not None else 6
         init_canonical = canonical if canonical is not None else False
         feature_builder = FeatureBuilder(k=init_k, canonical=init_canonical)
-        feature_builder.load(vectorizer_path, encoder_path)
+        feature_builder.load(vec_p, enc_p)
         return cls(model=model, feature_builder=feature_builder)
 
     def predict_sequence(self, raw_sequence: str) -> Dict[str, Any]:

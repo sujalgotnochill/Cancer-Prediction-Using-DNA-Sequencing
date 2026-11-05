@@ -1,0 +1,51 @@
+name: CI Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    name: Python ${{ matrix.python-version }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-latest, windows-latest ]
+        python-version: [ "3.9", "3.10", "3.11", "3.12" ]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+
+      - name: Upgrade packaging tools
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+
+      - name: Install dependencies
+        run: |
+          python -m pip install -r requirements.txt
+          python -m pip install -e ".[dev,app]"
+
+      - name: Run unit test suite
+        run: |
+          python -m pytest tests/test_cleaning.py tests/test_kmer.py tests/test_validation.py tests/test_splitter.py tests/test_preprocessing_flow.py tests/test_contracts.py tests/test_configuration.py tests/test_dataset_management.py tests/test_baseline_benchmarks.py tests/test_gene_family_splitting.py tests/test_phase5_optimization.py tests/test_vault.py tests/test_vault_security.py tests/test_fasta_inspector.py tests/test_imports.py tests/test_ingestion.py tests/test_integration_pipeline.py -v --tb=short
+
+      - name: Verify model artifact integrity
+        run: |
+          python scripts/download_model_artifacts.py --verify-only
+
+      - name: Run model integration and web application tests
+        run: |
+          python -m pytest tests/test_phase5_verification.py tests/test_web_application.py -v --tb=short
+

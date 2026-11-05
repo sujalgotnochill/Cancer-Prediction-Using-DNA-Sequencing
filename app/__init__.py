@@ -25,10 +25,14 @@ def create_app(test_config: Optional[Dict[str, Any]] = None) -> Flask:
         static_folder="static",
     )
 
-    # Base configuration
+    # Base configuration: Align file upload limits (5 MB file ceiling, 6 MB HTTP payload limit)
+    max_file_size = int(os.environ.get("MAX_FILE_SIZE_BYTES", 5 * 1024 * 1024))  # 5 MB max uploaded file
+    max_content_len = int(os.environ.get("MAX_CONTENT_LENGTH", max_file_size + 1024 * 1024))  # 6 MB HTTP envelope
+
     app.config.from_mapping(
         SECRET_KEY=os.environ.get("FLASK_SECRET_KEY", secrets.token_hex(32)),
-        MAX_CONTENT_LENGTH=16 * 1024 * 1024,  # 16 MB max payload
+        MAX_FILE_SIZE_BYTES=max_file_size,
+        MAX_CONTENT_LENGTH=max_content_len,
         MODEL_DIR=Path(os.environ.get("MODEL_DIR", "artifacts/models/phase5_best_candidate")),
         DATABASE_PATH=Path(os.environ.get("DATABASE_PATH", "artifacts/history/prediction_history.db")),
         WTF_CSRF_ENABLED=True,
@@ -39,12 +43,14 @@ def create_app(test_config: Optional[Dict[str, Any]] = None) -> Flask:
 
     # Initialize Services
     prediction_service: Optional[PredictionService] = None
+    prediction_service_error: Optional[str] = None
     try:
         prediction_service = PredictionService(
             model_dir=app.config["MODEL_DIR"],
         )
         logger.info("PredictionService initialized successfully in application factory")
     except (PredictionServiceError, Exception) as exc:
+        prediction_service_error = str(exc)
         logger.warning(
             "PredictionService initialization deferred or failed: %s. "
             "App will run with degraded prediction capability.",
@@ -59,6 +65,7 @@ def create_app(test_config: Optional[Dict[str, Any]] = None) -> Flask:
         logger.error("Failed to initialize HistoryService: %s", exc)
 
     app.prediction_service = prediction_service  # type: ignore[attr-defined]
+    app.prediction_service_error = prediction_service_error  # type: ignore[attr-defined]
     app.history_service = history_service  # type: ignore[attr-defined]
 
     # CSRF Protection & Session initialization
@@ -97,6 +104,7 @@ def create_app(test_config: Optional[Dict[str, Any]] = None) -> Flask:
             "csrf_token": session.get("csrf_token", ""),
             "app_name": "DNA Sequence Classifier",
             "model_ready": bool(app.prediction_service and app.prediction_service.is_ready),
+            "model_error": getattr(app, "prediction_service_error", None),
         }
 
     # Register Blueprints

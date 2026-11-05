@@ -9,7 +9,7 @@ This document describes the architecture, installation, operation, verification,
 The local web serving layer provides an interactive scientific dashboard for evaluating DNA sequences against the verified, frozen Phase 5 candidate model.
 
 ```text
-D:\Cancer-Prediction-Using-DNA-Sequencing\
+Cancer-Prediction-Using-DNA-Sequencing/
 ├── run.py                          # Local server entry point (http://127.0.0.1:5000)
 ├── app/
 │   ├── __init__.py                 # Flask application factory (create_app)
@@ -29,6 +29,8 @@ D:\Cancer-Prediction-Using-DNA-Sequencing\
 │       │   └── style.css           # Custom dark biotech aesthetic stylesheet
 │       └── js/
 │           └── app.js              # Vanilla JS: counter, live validation, drag-and-drop
+├── scripts/
+│   └── download_model_artifacts.py # Model artifact download, verification, packaging
 └── artifacts/
     ├── history/
     │   └── prediction_history.db   # Local SQLite database (metadata only)
@@ -45,7 +47,7 @@ D:\Cancer-Prediction-Using-DNA-Sequencing\
 
 | Component | Specification |
 | :--- | :--- |
-| **Backend Framework** | Python 3.8+ / Flask 3.0+ |
+| **Backend Framework** | Python 3.9+ / Flask 3.0+ |
 | **Model Candidate** | `LinearSVC` (\(C=1.0\), max_iter=2000, squared hinge loss) |
 | **Feature Representation** | 4-mer tokens (\(k=4\)), TF-IDF frequency representation, 256 vocabulary tokens |
 | **Inference Mode** | Strictly read-only & frozen. Zero runtime training or vectorizer refitting. |
@@ -59,37 +61,61 @@ D:\Cancer-Prediction-Using-DNA-Sequencing\
 
 ### Prerequisites
 
-- Python 3.8, 3.9, 3.10, 3.11, or 3.12 (Python 3.8 verified).
-- Windows, macOS, or Linux.
+- Python 3.9, 3.10, 3.11, or 3.12 (Python 3.12 verified).
+- Windows PowerShell, macOS, or Linux.
+- Git.
 
-### Installation Steps
+### Installation Steps (Windows PowerShell)
 
-1. **Navigate to the project root:**
+1. **Clone the repository and navigate to root:**
    ```powershell
-   cd D:\Cancer-Prediction-Using-DNA-Sequencing
+   git clone https://github.com/sujalgotnochill/Cancer-Prediction-Using-DNA-Sequencing.git
+   cd Cancer-Prediction-Using-DNA-Sequencing
    ```
 
-2. **Activate your virtual environment or use your configured Python binary:**
+2. **Create and activate a virtual environment:**
    ```powershell
-   # Using existing Python environment
-   & "C:\Users\HP\AppData\Local\Programs\Python\Python38\python.exe" -m pip install -r requirements.txt
+   python -m venv .venv
+   .\.venv\Scripts\Activate.ps1
+   ```
+   *(Note: If script execution is restricted on Windows, enable current user execution with: `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser`)*
+
+3. **Upgrade pip and install dependencies:**
+   ```powershell
+   python -m pip install --upgrade pip
+   python -m pip install -r requirements.txt
    ```
 
-3. **Verify installed packages:**
+4. **Install the project in editable mode:**
    ```powershell
-   & "C:\Users\HP\AppData\Local\Programs\Python\Python38\python.exe" -c "import flask, sklearn, joblib; print('All web dependencies verified')"
+   python -m pip install -e .
+   ```
+
+5. **Verify and set up model artifacts:**
+   ```powershell
+   python scripts/download_model_artifacts.py
+   ```
+   This script verifies that the frozen candidate files exist and validates their SHA-256 cryptographic checksums against `checksums.sha256`.
+
+6. **(Optional) Configure environment variables:**
+   Copy `.env.example` to `.env` or set environment variables in your shell:
+   ```powershell
+   $env:FLASK_HOST = "127.0.0.1"
+   $env:FLASK_PORT = "5000"
+   $env:FLASK_DEBUG = "0"
+   $env:MODEL_DIR = "artifacts/models/phase5_best_candidate"
+   $env:MAX_FILE_SIZE_BYTES = "5242880"   # 5 MB
    ```
 
 ---
 
-## 3. Starting the Web Application
+## 3. Starting the Web Application & Running Tests
 
-To start the local application using the standard entry point:
+### Starting the Local Web Server
 
 ```powershell
 python run.py
 ```
-*(Or with explicit executable path: `& "C:\Users\HP\AppData\Local\Programs\Python\Python38\python.exe" run.py`)*
 
 The server will output:
 
@@ -103,6 +129,21 @@ The server will output:
   Model Candidate:  LinearSVC (k=4, TF-IDF standard representation)
   Dataset Notice:   Educational sequence-source classification only
 =================================================================
+```
+
+### Running the Test Suite
+
+Execute the full automated test suite using pytest:
+
+```powershell
+# Run the complete test suite
+pytest
+
+# Run tests with verbose output and summary
+pytest -v
+
+# Run web application tests specifically
+pytest tests/test_web_application.py
 ```
 
 ### Accessing the Dashboard
@@ -207,9 +248,9 @@ Local prediction history is stored in SQLite at `artifacts/history/prediction_hi
 
 ---
 
-## 8. Verified Holdout Evaluation Benchmark
+## 8. Verified Holdout Evaluation Benchmark & Holdout Status
 
-The Phase 5 frozen candidate was evaluated exactly once against the sealed Tier 2 holdout dataset (\(N=240\)). The evaluation yielded:
+The Phase 5 frozen candidate was evaluated against the historical Tier 2 holdout dataset (\(N=240\)) during Phase 6. The official evaluation receipt (`artifacts/vault/final_evaluation_receipt.json`) records:
 
 - **Overall Accuracy:** 91.25% (219 / 240 correct, 95% CI: [87.0%, 94.2%])
 - **Macro F1 Score:** 0.9105
@@ -220,6 +261,10 @@ The Phase 5 frozen candidate was evaluated exactly once against the sealed Tier 
   - Liver: 100.00% (60 / 60 correct, 0 misclassifications)
 
 *Note:* Development 3-fold cross-validation achieved a higher score (96.71% Macro F1). The holdout revealed weaker Cervical recall, illustrating generalization limits when predicting across unobserved gene families.
+
+> [!IMPORTANT]
+> **Holdout Status & Evaluation Integrity Disclosure:**
+> This 240-sample holdout was unsealed on 2026-11-04 for the Phase 6 evaluation and subsequently published in commit `864e758`. Consequently, it is no longer sealed or untouched. The metrics above represent historical evaluation receipts. Future model iterations require a newly constructed, independently accessioned holdout to maintain scientific validity.
 
 ---
 

@@ -72,13 +72,14 @@ class PredictionService:
         self._load_artifacts()
 
     def _load_artifacts(self) -> None:
-        """Load frozen model, vectorizer, and encoder artifacts from disk."""
+        """Load frozen model, vectorizer, and encoder artifacts from disk with SHA-256 integrity verification."""
         logger.info("Initializing PredictionService from %s", self.model_dir)
 
         model_path = self.model_dir / "model.joblib"
         vec_path = self.model_dir / "vectorizer.joblib"
         enc_path = self.model_dir / "encoder.joblib"
         cfg_path = self.model_dir / "model_config.json"
+        chk_path = self.model_dir / "checksums.sha256"
 
         missing = []
         for name, p in [
@@ -88,13 +89,56 @@ class PredictionService:
             ("config", cfg_path),
         ]:
             if not p.exists():
-                missing.append(f"{name} ({p})")
+                missing.append(f"{name} ({p.name})")
 
         if missing:
-            msg = f"Missing required Phase 5 model artifacts in {self.model_dir}: {', '.join(missing)}"
+            msg = (
+                f"Missing required Phase 5 model artifacts in {self.model_dir}: {', '.join(missing)}. "
+                f"Please obtain the artifacts by running: python scripts/download_model_artifacts.py"
+            )
             logger.error(msg)
             self.is_ready = False
             raise PredictionServiceError(msg)
+
+        # SHA-256 cryptographic integrity verification before loading
+        if chk_path.exists():
+            import hashlib
+            expected_hashes: Dict[str, str] = {}
+            try:
+                with open(chk_path, "r", encoding="utf-8") as cf:
+                    for line in cf:
+                        line = line.strip()
+                        if line and not line.startswith("#"):
+                            parts = line.split(None, 1)
+                            if len(parts) == 2:
+                                expected_hashes[Path(parts[1].strip()).name] = parts[0].strip().lower()
+
+                for fname, p in [
+                    ("model.joblib", model_path),
+                    ("vectorizer.joblib", vec_path),
+                    ("encoder.joblib", enc_path),
+                    ("model_config.json", cfg_path),
+                ]:
+                    if fname in expected_hashes:
+                        h = hashlib.sha256()
+                        with open(p, "rb") as bf:
+                            while chunk := bf.read(65536):
+                                h.update(chunk)
+                        actual_sha = h.hexdigest().lower()
+                        if actual_sha != expected_hashes[fname]:
+                            err_msg = (
+                                f"Integrity check failed: Checksum mismatch for artifact '{fname}'. "
+                                f"Expected SHA-256: {expected_hashes[fname]}, Actual: {actual_sha}. "
+                                f"The artifact may be corrupted or modified."
+                            )
+                            logger.error(err_msg)
+                            self.is_ready = False
+                            raise PredictionServiceError(err_msg)
+                logger.info("Cryptographic SHA-256 checksums verified for all Phase 5 artifacts")
+            except PredictionServiceError:
+                raise
+            except Exception as chk_err:
+                logger.warning("Could not read checksums file %s: %s", chk_path, chk_err)
 
         try:
             with open(cfg_path, "r", encoding="utf-8") as f:

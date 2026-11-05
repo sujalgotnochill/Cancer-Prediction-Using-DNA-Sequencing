@@ -55,15 +55,20 @@ def index():
 
 @bp.route("/predict", methods=["POST"])
 def predict():
-    """Handle sequence classification submissions from textarea or file upload."""
+    """Handle sequence classification submissions from textarea, file upload, or JSON body."""
     prediction_service = current_app.prediction_service
     history_service = current_app.history_service
+    max_file_bytes = current_app.config.get("MAX_FILE_SIZE_BYTES", MAX_FILE_BYTES)
 
     if not prediction_service or not prediction_service.is_ready:
-        flash(
-            "Prediction model is currently unavailable. Please verify model artifacts.",
-            "error",
+        msg = (
+            "Prediction model is currently unavailable. Frozen model artifacts "
+            "(artifacts/models/phase5_best_candidate) are missing or uninitialized. "
+            "Please run: python scripts/download_model_artifacts.py"
         )
+        if request.headers.get("Accept") == "application/json" or request.is_json:
+            return jsonify({"error": msg, "status": "degraded"}), 503
+        flash(msg, "error")
         return redirect(url_for("main.index"))
 
     raw_input_text: str = ""
@@ -78,16 +83,16 @@ def predict():
                 f"Unsupported file format '{safe_name}'. "
                 f"Supported file extensions: {', '.join(sorted(ALLOWED_EXTENSIONS))}"
             )
-            if request.headers.get("Accept") == "application/json":
+            if request.headers.get("Accept") == "application/json" or request.is_json:
                 return jsonify({"error": msg}), 400
             flash(msg, "error")
             return redirect(url_for("main.index"))
 
         # Read file with size safeguard
-        file_bytes = uploaded_file.read(MAX_FILE_BYTES + 1)
-        if len(file_bytes) > MAX_FILE_BYTES:
-            msg = f"Uploaded file exceeds maximum allowed size of {MAX_FILE_BYTES // (1024 * 1024)} MB."
-            if request.headers.get("Accept") == "application/json":
+        file_bytes = uploaded_file.read(max_file_bytes + 1)
+        if len(file_bytes) > max_file_bytes:
+            msg = f"Uploaded file exceeds maximum allowed size of {max_file_bytes // (1024 * 1024)} MB."
+            if request.headers.get("Accept") == "application/json" or request.is_json:
                 return jsonify({"error": msg}), 413
             flash(msg, "error")
             return redirect(url_for("main.index"))
@@ -99,21 +104,25 @@ def predict():
                 raw_input_text = file_bytes.decode("latin-1")
             except Exception as dec_err:
                 msg = f"Failed to decode uploaded text file: {dec_err}"
-                if request.headers.get("Accept") == "application/json":
+                if request.headers.get("Accept") == "application/json" or request.is_json:
                     return jsonify({"error": msg}), 400
                 flash(msg, "error")
                 return redirect(url_for("main.index"))
 
         source_filename = safe_name
 
-    # 2. Check textarea input if no file provided
+    # 2. Check JSON payload or form textarea input if no file provided
     if not raw_input_text:
-        raw_input_text = request.form.get("sequence_text", "")
+        if request.is_json:
+            json_payload = request.get_json(silent=True) or {}
+            raw_input_text = json_payload.get("sequence_text") or json_payload.get("sequence") or ""
+        if not raw_input_text:
+            raw_input_text = request.form.get("sequence_text", "")
 
     # 3. Validate presence of input
     if not raw_input_text or not raw_input_text.strip():
         msg = "No sequence provided. Please paste a DNA sequence or upload a FASTA file."
-        if request.headers.get("Accept") == "application/json":
+        if request.headers.get("Accept") == "application/json" or request.is_json:
             return jsonify({"error": msg}), 400
         flash(msg, "error")
         return redirect(url_for("main.index"))
@@ -222,8 +231,14 @@ def api_health():
         "model_ready": model_ready,
         "model_id": (
             prediction_service.model_config.get("model_candidate_id")
-            if model_ready
+            if (prediction_service and model_ready)
             else None
+        ),
+        "setup_required": not model_ready,
+        "setup_instructions": (
+            None
+            if model_ready
+            else "Run 'python scripts/download_model_artifacts.py' to download and verify frozen Phase 5 artifacts."
         ),
     })
 

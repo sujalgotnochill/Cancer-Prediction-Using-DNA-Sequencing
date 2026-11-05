@@ -31,6 +31,23 @@
     </div>
 
     <div class="card-body">
+      {% if not model_ready %}
+      <div class="callout-box warning" style="margin-bottom: 1.5rem; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.4); border-radius: 8px; padding: 1rem;">
+        <h3 style="color: #fca5a5; font-size: 0.95rem; margin-bottom: 0.5rem; font-weight: 700; display: flex; align-items: center; gap: 0.5rem;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          Model Artifacts Missing &bull; Setup Required
+        </h3>
+        <p style="font-size: 0.85rem; color: #fecaca; line-height: 1.5; margin-bottom: 0.5rem;">
+          The frozen Phase 5 model artifacts (<code>artifacts/models/phase5_best_candidate/</code>) are not installed or failed verification.
+          Sequence classification is currently disabled.
+        </p>
+        <div style="font-size: 0.82rem; color: #f3f4f6;">
+          To install and verify the frozen artifacts, execute in PowerShell:
+          <pre style="background: rgba(0,0,0,0.5); padding: 0.5rem 0.75rem; border-radius: 4px; margin-top: 0.4rem; overflow-x: auto; color: #a7f3d0; font-family: monospace;">python scripts/download_model_artifacts.py</pre>
+        </div>
+      </div>
+      {% endif %}
+
       <form id="predict-form" action="{{ url_for('main.predict') }}" method="POST" enctype="multipart/form-data">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
@@ -78,7 +95,7 @@
 
         <div class="form-actions">
           <div class="button-group">
-            <button type="submit" id="btn-submit-predict" class="btn btn-primary">
+            <button type="submit" id="btn-submit-predict" class="btn btn-primary" {% if not model_ready %}disabled title="Model artifacts missing. Run python scripts/download_model_artifacts.py to set up."{% endif %}>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <polygon points="5 3 19 12 5 21 5 3"></polygon>
               </svg>
@@ -146,7 +163,13 @@
           </li>
           <li class="spec-item">
             <span class="spec-key">Model Status</span>
-            <span class="spec-val"><span class="badge-tag">Frozen Artifact</span></span>
+            <span class="spec-val">
+              {% if model_ready %}
+              <span class="badge-tag">Frozen Artifact</span>
+              {% else %}
+              <span class="badge-tag" style="background: rgba(239, 68, 68, 0.15); border-color: rgba(239, 68, 68, 0.4); color: #fca5a5;">Setup Required</span>
+              {% endif %}
+            </span>
           </li>
         </ul>
       </div>

@@ -1,0 +1,91 @@
+{
+  "model_candidate_id": "canonical_comp_linear_svc_k4_standard",
+  "model_name": "linear_svc",
+  "architecture_class": "LinearSVCClassifier",
+  "is_frozen": true,
+  "frozen_at": "2026-11-04 17:28:21",
+  "training_cohort": {
+    "path": "data/processed/development_cohort.csv",
+    "sample_count": 960,
+    "sha256": "7c35fc4f226488cfc2d37ed332746be3f3c1aa8982ab7a8991c7fb374781475c"
+  },
+  "feature_configuration": {
+    "k": 4,
+    "vectorizer_type": "tfidf",
+    "canonical": false,
+    "n_features": 256,
+    "sparse_representation": true
+  },
+  "hyperparameters": {
+    "C": 1.0,
+    "dual": "auto",
+    "max_iter": 2000
+  },
+  "primary_cv_performance": {
+    "mean_macro_f1": 0.9670622261055463,
+    "std_macro_f1": 0.006339456159280255,
+    "mean_accuracy": 0.9673544657097288,
+    "std_accuracy": 0.007341627294049382,
+    "fold_results": [
+      {
+        "fold": 0,
+        "accuracy": 0.9744318181818182,
+        "f1_macro": 0.9719502070636037,
+        "train_time": 0.013828277587890625,
+        "inference_time": 0.0,
+        "n_features": 256,
+        "cervical_recall": 1.0,
+        "colorectal_recall": 0.9625,
+        "endometrial_recall": 0.9625,
+        "liver_recall": 0.9625
+      },
+      {
+        "fold": 1,
+        "accuracy": 0.9572368421052632,
+        "f1_macro": 0.958109488572867,
+        "train_time": 0.010489463806152344,
+        "inference_time": 0.0,
+        "n_features": 256,
+        "cervical_recall": 0.984375,
+        "colorectal_recall": 0.975,
+        "endometrial_recall": 0.875,
+        "liver_recall": 1.0
+      },
+      {
+        "fold": 2,
+        "accuracy": 0.9703947368421053,
+        "f1_macro": 0.9711269826801684,
+        "train_time": 0.02099466323852539,
+        "inference_time": 0.0,
+        "n_features": 256,
+        "cervical_recall": 0.96875,
+        "colorectal_recall": 0.9625,
+        "endometrial_recall": 0.95,
+        "liver_recall": 1.0
+      }
+    ]
+  },
+  "secondary_shufflesplit_performance": {
+    "name": "linear_svc (k=4, TF-IDF, standard)",
+    "model_name": "linear_svc",
+    "iterations": 10,
+    "f1_scores": [
+      0.9107,
+      0.8792,
+      0.979,
+      0.9832,
+      0.9417,
+      0.9572,
+      0.9653,
+      0.9667,
+      0.979,
+      0.9869
+    ],
+    "median_macro_f1": 0.966,
+    "iqr_macro_f1": 0.0334,
+    "median_accuracy": 0.9713,
+    "iqr_accuracy": 0.0142,
+    "independence_disclosure": "Resamplings are non-independent correlated draws from the 23 development gene families. Reported as Median and IQR."
+  },
+  "safeguard_attestation": "Model configuration frozen for Phase 5. The Tier 2 Sealed Test Vault remains locked."
+}
